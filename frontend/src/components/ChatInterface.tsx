@@ -183,7 +183,7 @@ export default function ChatInterface({ onMapFocus }: ChatInterfaceProps) {
           </div>
         )}
 
-        {messages.map((msg, i) => (
+        {messages.filter((msg) => !(msg.role === "agent" && !msg.content.trim())).map((msg, i) => (
           <div
             key={i}
             className={`${

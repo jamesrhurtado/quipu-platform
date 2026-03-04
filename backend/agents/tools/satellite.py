@@ -34,9 +34,16 @@ class FireMonitorPlugin:
             f"{settings.nasa_firms_map_key}/VIIRS_SNPP_NRT/{bbox}/{days_back}"
         )
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url, timeout=60)
-            resp.raise_for_status()
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, timeout=60)
+                resp.raise_for_status()
+        except Exception as e:
+            return wrap_tool_result(
+                {"count": 0, "fires": [], "error": f"NASA FIRMS unavailable: {e}"},
+                source="NASA FIRMS",
+                timestamps=[],
+            )
 
         lines = resp.text.strip().split("\n")
         if len(lines) < 2:

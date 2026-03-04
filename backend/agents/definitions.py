@@ -3,10 +3,19 @@
 import asyncio
 import json
 import logging
+import os
 import re
 import time
 from collections.abc import AsyncIterator
 from typing import Any
+
+# Semantic Kernel validates its own AzureOpenAISettings from os.environ,
+# but pydantic-settings only loads .env into the model — not into the process env.
+# Bridge the gap before any SK imports touch settings validation.
+from config import settings as _settings
+
+os.environ.setdefault("AZURE_OPENAI_ENDPOINT", _settings.azure_openai_endpoint)
+os.environ.setdefault("AZURE_OPENAI_API_KEY", _settings.azure_openai_api_key)
 
 from semantic_kernel.agents import (
     ChatCompletionAgent,

@@ -34,10 +34,17 @@ class EmergencyPlugin:
             "orderby": "time",
             "limit": 20,
         }
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url, params=params, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, params=params, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as e:
+            return wrap_tool_result(
+                {"count": 0, "earthquakes": [], "error": f"USGS unavailable: {e}"},
+                source="USGS",
+                timestamps=[],
+            )
 
         features = data.get("features", [])
         results = []
@@ -76,9 +83,16 @@ class EmergencyPlugin:
         import xml.etree.ElementTree as ET
 
         url = "https://www.gdacs.org/xml/rss.xml"
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url, timeout=30)
-            resp.raise_for_status()
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, timeout=30)
+                resp.raise_for_status()
+        except Exception as e:
+            return wrap_tool_result(
+                {"count": 0, "alerts": [], "error": f"GDACS unavailable: {e}"},
+                source="GDACS",
+                timestamps=[],
+            )
 
         root = ET.fromstring(resp.text)
         items = root.findall(".//item")
@@ -134,10 +148,17 @@ class EmergencyPlugin:
         if category != "all":
             params["category"] = category
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url, params=params, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, params=params, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as e:
+            return wrap_tool_result(
+                {"count": 0, "events": [], "error": f"NASA EONET unavailable: {e}"},
+                source="NASA EONET",
+                timestamps=[],
+            )
 
         events = data.get("events", [])
         results = []

@@ -84,6 +84,12 @@ class BlueskyBuffer:
         }
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream("GET", JETSTREAM_URL, params=params) as resp:
+                if resp.status_code != 200:
+                    raise httpx.HTTPStatusError(
+                        f"Jetstream returned {resp.status_code}",
+                        request=resp.request,
+                        response=resp,
+                    )
                 logger.info("Connected to Bluesky Jetstream")
                 async for line in resp.aiter_lines():
                     if not self._running:

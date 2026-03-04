@@ -35,10 +35,17 @@ class SocialNewsPlugin:
         if source_country != "all":
             params["query"] += f" sourcecountry:{source_country}"
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url, params=params, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, params=params, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+        except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.HTTPStatusError, Exception) as e:
+            return wrap_tool_result(
+                {"count": 0, "articles": [], "error": f"GDELT unavailable: {e}"},
+                source="GDELT",
+                timestamps=[],
+            )
 
         articles = data.get("articles", [])
         results = []
@@ -102,16 +109,18 @@ class SocialNewsPlugin:
         disaster_type: Annotated[str, "Disaster type: earthquake, flood, cyclone, wildfire, drought, or 'all'"] = "all",
         days_back: Annotated[int, "Number of days to look back"] = 30,
     ) -> Annotated[str, "JSON string with humanitarian reports"]:
+        from config import settings as app_settings
+
         url = "https://api.reliefweb.int/v1/reports"
+        params = {"appname": app_settings.reliefweb_appname}
         payload: dict = {
-            "appname": "sentinel-agent",
             "query": {"value": query},
             "limit": 15,
             "sort": ["date.created:desc"],
             "fields": {
                 "include": [
                     "title", "url", "source", "date", "country",
-                    "disaster_type", "body-html",
+                    "disaster_type",
                 ],
             },
         }
@@ -124,10 +133,21 @@ class SocialNewsPlugin:
         if filters:
             payload["filter"] = {"conditions": filters, "operator": "AND"}
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(url, params=params, json=payload, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as e:
+            return wrap_tool_result(
+                {
+                    "count": 0,
+                    "reports": [],
+                    "error": f"ReliefWeb API unavailable: {e}. Do NOT retry this tool — use other sources instead.",
+                },
+                source="ReliefWeb",
+                timestamps=[],
+            )
 
         reports = data.get("data", [])
         results = []

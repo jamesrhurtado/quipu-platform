@@ -1,5 +1,6 @@
 """Keyword-based query classifier for dynamic agent selection."""
 
+import re
 from dataclasses import dataclass, field
 
 
@@ -30,7 +31,7 @@ KEYWORD_AGENTS: dict[str, list[str]] = {
     "tormenta": ["EmergencyMonitor"],
     "drought": ["EmergencyMonitor"],
     "sequía": ["EmergencyMonitor"],
-    "landslide": ["EmergencyMonitor"],
+    "landslide": ["EmergencyMonitor", "WeatherAgent"],
     "disaster": ["EmergencyMonitor"],
     "desastre": ["EmergencyMonitor"],
     "alert": ["EmergencyMonitor"],
@@ -53,6 +54,25 @@ KEYWORD_AGENTS: dict[str, list[str]] = {
     "reliefweb": ["SocialNewsAgent"],
     "humanitarian": ["SocialNewsAgent"],
     "humanitario": ["SocialNewsAgent"],
+    # Weather / rainfall
+    "weather": ["WeatherAgent"],
+    "rain": ["WeatherAgent"],
+    "rainfall": ["WeatherAgent"],
+    "lluvia": ["WeatherAgent"],
+    "precipitation": ["WeatherAgent"],
+    "huaico": ["WeatherAgent", "EmergencyMonitor"],
+    "deslizamiento": ["WeatherAgent", "EmergencyMonitor"],
+    "flood risk": ["WeatherAgent", "EmergencyMonitor"],
+    # Notification
+    "notify": ["NotificationAgent"],
+    "notification": ["NotificationAgent"],
+    "notificar": ["NotificationAgent"],
+    "teams": ["NotificationAgent"],
+    "send alert": ["NotificationAgent"],
+    "enviar": ["NotificationAgent"],
+    "communicate": ["NotificationAgent"],
+    "avisar": ["NotificationAgent"],
+    "alert authorities": ["NotificationAgent"],
     # Analysis
     "analysis": ["AnalysisAgent"],
     "análisis": ["AnalysisAgent"],
@@ -62,6 +82,12 @@ KEYWORD_AGENTS: dict[str, list[str]] = {
     "riesgo": ["AnalysisAgent"],
     "sitrep": ["AnalysisAgent"],
     "situation report": ["AnalysisAgent"],
+    "getting worse": ["AnalysisAgent"],
+    "increasing": ["AnalysisAgent"],
+    "escalating": ["AnalysisAgent"],
+    "historical": ["AnalysisAgent"],
+    "empeorando": ["AnalysisAgent"],
+    "decreasing": ["AnalysisAgent"],
 }
 
 # Broad queries that should activate all agents
@@ -71,7 +97,9 @@ BROAD_KEYWORDS = [
     "how is", "cómo está", "situation", "situación", "monitor",
 ]
 
-ALL_AGENTS = ["EmergencyMonitor", "SocialNewsAgent", "FireMonitorAgent", "AnalysisAgent"]
+# Agents activated for broad "what's happening" queries
+# NotificationAgent excluded — only activates on explicit send/notify requests
+ALL_AGENTS = ["EmergencyMonitor", "SocialNewsAgent", "FireMonitorAgent", "AnalysisAgent", "WeatherAgent"]
 DEFAULT_AGENTS = ["EmergencyMonitor", "AnalysisAgent"]
 
 
@@ -79,9 +107,9 @@ def classify_query(query: str) -> ClassificationResult:
     """Classify a user query to determine which agents should be activated."""
     query_lower = query.lower()
 
-    # Check for broad queries first
+    # Check for broad queries first (word-boundary matching to avoid false positives like "all" in "rainfall")
     for keyword in BROAD_KEYWORDS:
-        if keyword in query_lower:
+        if re.search(r'\b' + re.escape(keyword) + r'\b', query_lower):
             return ClassificationResult(
                 agents=list(ALL_AGENTS),
                 reasoning=f"Broad query detected ('{keyword}') — activating all agents for comprehensive coverage",

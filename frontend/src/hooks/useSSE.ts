@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { createSSEConnection } from "@/lib/api";
+import { AlertData, createSSEConnection } from "@/lib/api";
 
-export function useSSE(onNewEvent?: () => void) {
+export function useSSE(onNewEvent?: () => void, onAlert?: (alert: AlertData) => void) {
   const [connected, setConnected] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
@@ -14,6 +14,8 @@ export function useSSE(onNewEvent?: () => void) {
           onNewEvent?.();
         } else if (event === "poll_complete") {
           onNewEvent?.();
+        } else if (event === "alert") {
+          onAlert?.(data as AlertData);
         }
       },
       () => {
@@ -26,7 +28,7 @@ export function useSSE(onNewEvent?: () => void) {
       es.close();
       esRef.current = null;
     };
-  }, [onNewEvent]);
+  }, [onNewEvent, onAlert]);
 
   return { connected };
 }

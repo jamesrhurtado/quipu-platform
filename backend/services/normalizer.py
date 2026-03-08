@@ -171,7 +171,7 @@ def normalize_firms_fire(fire: dict[str, Any]) -> dict[str, Any] | None:
         "title": f"Active Fire ({fire.get('instrument', 'VIIRS')})",
         "description": f"Brightness: {fire.get('bright_ti4', 'N/A')}K, FRP: {fire.get('frp', 'N/A')} MW",
         "severity": sev,
-        "magnitude": fire.get("frp"),
+        "magnitude": float(fire["frp"]) if fire.get("frp") else None,
         "lon": lon,
         "lat": lat,
         "started_at": started,

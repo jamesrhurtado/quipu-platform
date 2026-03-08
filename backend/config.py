@@ -26,6 +26,16 @@ class Settings(BaseSettings):
 
     # Bluesky
     bluesky_enabled: bool = False
+    bluesky_handle: str = ""
+    bluesky_app_password: str = ""
+    bluesky_notifications_enabled: bool = True
+
+    # Microsoft Teams
+    teams_enabled: bool = True
+    teams_webhook_url: str = ""
+
+    # Dashboard
+    dashboard_url: str = "http://localhost:3000"
 
     # App
     poll_interval_seconds: int = 300

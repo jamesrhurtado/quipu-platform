@@ -232,6 +232,85 @@ async def poll_firms(client: httpx.AsyncClient) -> int:
         return 0
 
 
+MONITORED_REGIONS = {
+    "Peru": {"min_lat": -18, "max_lat": 0, "min_lon": -82, "max_lon": -68},
+    "Cusco, Peru": {"min_lat": -15, "max_lat": -12, "min_lon": -73, "max_lon": -70},
+    "Lima, Peru": {"min_lat": -13, "max_lat": -11, "min_lon": -78, "max_lon": -76},
+    "Piura, Peru": {"min_lat": -6, "max_lat": -4, "min_lon": -81, "max_lon": -79},
+    "Arequipa, Peru": {"min_lat": -18, "max_lat": -15, "min_lon": -73, "max_lon": -70},
+    "Cajamarca, Peru": {"min_lat": -8, "max_lat": -4, "min_lon": -80, "max_lon": -77},
+}
+
+
+async def auto_risk_step() -> None:
+    """Automatic risk assessment for monitored regions. Zero LLM cost — pure SQL + Python."""
+    from agents.risk_engine import compute_risk
+    from services.alert_engine import evaluate_and_alert
+
+    pool = await get_pool()
+
+    for region, bbox in MONITORED_REGIONS.items():
+        try:
+            async with pool.acquire() as conn:
+                # Max severity in last 24h within bounding box
+                max_sev = await conn.fetchval(
+                    """
+                    SELECT COALESCE(MAX(severity), 1)
+                    FROM events
+                    WHERE created_at > NOW() - INTERVAL '24 hours'
+                      AND ST_Intersects(
+                          coordinates,
+                          ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
+                      )
+                    """,
+                    bbox["min_lon"], bbox["min_lat"], bbox["max_lon"], bbox["max_lat"],
+                )
+
+                # Fire count in last 24h
+                fire_count = await conn.fetchval(
+                    """
+                    SELECT COUNT(*)
+                    FROM events
+                    WHERE event_type = 'wildfire'
+                      AND created_at > NOW() - INTERVAL '24 hours'
+                      AND ST_Intersects(
+                          coordinates,
+                          ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
+                      )
+                    """,
+                    bbox["min_lon"], bbox["min_lat"], bbox["max_lon"], bbox["max_lat"],
+                )
+
+            assessment = compute_risk(
+                region=region,
+                max_severity=float(max_sev),
+                fire_count=int(fire_count),
+                news_article_count=0,
+                avg_confidence=0.7,
+            )
+
+            # Persist risk assessment
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO risk_assessments (region, risk_score, risk_level, components, explanation)
+                    VALUES ($1, $2, $3, $4, $5)
+                    """,
+                    assessment.region,
+                    assessment.risk_score,
+                    assessment.risk_level,
+                    json.dumps(assessment.components),
+                    assessment.explanation,
+                )
+
+            # Evaluate alert threshold
+            if assessment.risk_score >= 3.0:
+                await evaluate_and_alert(assessment)
+
+        except Exception as e:
+            logger.error(f"Auto-risk failed for {region}: {e}")
+
+
 async def run_poll_cycle(client: httpx.AsyncClient) -> dict:
     """Run all pollers concurrently."""
     results = await asyncio.gather(
@@ -272,6 +351,13 @@ async def start_polling() -> None:
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "summary": summary,
                 })
+
+                # Auto-risk assessment for monitored regions
+                try:
+                    await auto_risk_step()
+                    logger.info("Auto-risk step complete")
+                except Exception as e:
+                    logger.error(f"Auto-risk step error: {e}")
             except Exception as e:
                 logger.error(f"Poll cycle error: {e}")
 

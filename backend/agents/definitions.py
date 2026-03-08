@@ -1,30 +1,15 @@
-"""Agent definitions and Magentic orchestration setup."""
+"""Agent definitions and Magentic orchestration setup using Microsoft Agent Framework."""
 
-import asyncio
 import json
 import logging
-import os
 import re
 import time
 from collections.abc import AsyncIterator
 from typing import Any
 
-# Semantic Kernel validates its own AzureOpenAISettings from os.environ,
-# but pydantic-settings only loads .env into the model — not into the process env.
-# Bridge the gap before any SK imports touch settings validation.
-from config import settings as _settings
-
-os.environ.setdefault("AZURE_OPENAI_ENDPOINT", _settings.azure_openai_endpoint)
-os.environ.setdefault("AZURE_OPENAI_API_KEY", _settings.azure_openai_api_key)
-
-from semantic_kernel.agents import (
-    ChatCompletionAgent,
-    MagenticOrchestration,
-    StandardMagenticManager,
-)
-from semantic_kernel.agents.runtime import InProcessRuntime
-from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion
-from semantic_kernel.contents import ChatMessageContent
+from agent_framework import Agent, AgentResponseUpdate, Message, WorkflowEvent
+from agent_framework.azure import AzureOpenAIChatClient
+from agent_framework.orchestrations import MagenticBuilder
 
 from agents.classifier import classify_query
 from agents.instructions import (
@@ -32,15 +17,39 @@ from agents.instructions import (
     EMERGENCY_MONITOR_INSTRUCTIONS,
     FIRE_MONITOR_INSTRUCTIONS,
     MANAGER_INSTRUCTIONS,
+    NOTIFICATION_INSTRUCTIONS,
     SOCIAL_NEWS_INSTRUCTIONS,
+    WEATHER_INSTRUCTIONS,
 )
-from agents.tools.analysis import AnalysisPlugin
-from agents.tools.emergency import EmergencyPlugin
-from agents.tools.satellite import FireMonitorPlugin
-from agents.tools.social import SocialNewsPlugin
+from agents.tools.analysis import (
+    compute_risk_assessment,
+    generate_situation_report,
+    get_risk_trend,
+    query_event_database,
+)
+from agents.tools.emergency import (
+    query_cached_events,
+    query_earthquakes,
+    query_eonet_events,
+    query_gdacs_alerts,
+)
+from agents.tools.notification import get_notification_history, post_bluesky_alert, send_teams_alert
+from agents.tools.satellite import query_active_fires
+from agents.tools.social import monitor_bluesky, search_news, search_reliefweb
+from agents.tools.weather import check_rainfall_anomaly
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _make_chat_client(deployment: str) -> AzureOpenAIChatClient:
+    """Create an Azure OpenAI chat client for the Agent Framework."""
+    return AzureOpenAIChatClient(
+        endpoint=settings.azure_openai_endpoint,
+        deployment_name=deployment,
+        api_key=settings.azure_openai_api_key,
+    )
+
 
 # Agent definitions registry
 AGENT_DEFS: dict[str, dict[str, Any]] = {
@@ -48,41 +57,43 @@ AGENT_DEFS: dict[str, dict[str, Any]] = {
         "description": "Monitors real-time earthquake, flood, cyclone, volcano, and disaster alerts from USGS, GDACS, NASA EONET, and local database.",
         "instructions": EMERGENCY_MONITOR_INSTRUCTIONS,
         "deployment": "mini",
-        "plugin_class": EmergencyPlugin,
+        "tools": [query_earthquakes, query_gdacs_alerts, query_eonet_events, query_cached_events],
     },
     "SocialNewsAgent": {
         "description": "Searches news articles via GDELT, social media via Bluesky, and humanitarian reports via ReliefWeb for disaster coverage.",
         "instructions": SOCIAL_NEWS_INSTRUCTIONS,
         "deployment": "mini",
-        "plugin_class": SocialNewsPlugin,
+        "tools": [search_news, monitor_bluesky, search_reliefweb],
     },
     "FireMonitorAgent": {
         "description": "Queries NASA FIRMS for active fire detections and hotspot analysis.",
         "instructions": FIRE_MONITOR_INSTRUCTIONS,
         "deployment": "mini",
-        "plugin_class": FireMonitorPlugin,
+        "tools": [query_active_fires],
     },
     "AnalysisAgent": {
-        "description": "Analyzes aggregated disaster data from the PostGIS database, computes risk assessments, and generates structured situation reports.",
+        "description": "Analyzes aggregated disaster data from the PostGIS database, computes risk assessments, generates situation reports, and analyzes risk trends.",
         "instructions": ANALYSIS_INSTRUCTIONS,
         "deployment": "full",
-        "plugin_class": AnalysisPlugin,
+        "tools": [query_event_database, generate_situation_report, compute_risk_assessment, get_risk_trend],
+    },
+    "WeatherAgent": {
+        "description": "Detects rainfall anomalies and weather-related disaster risks using Open-Meteo climate data. Flags landslide risk from heavy rainfall.",
+        "instructions": WEATHER_INSTRUCTIONS,
+        "deployment": "mini",
+        "tools": [check_rainfall_anomaly],
+    },
+    "NotificationAgent": {
+        "description": "Delivers alerts to Microsoft Teams (Adaptive Cards) and Bluesky (public advisories). Tracks notification delivery history.",
+        "instructions": NOTIFICATION_INSTRUCTIONS,
+        "deployment": "mini",
+        "tools": [send_teams_alert, post_bluesky_alert, get_notification_history],
     },
 }
 
 
-def _make_service(deployment: str) -> AzureChatCompletion:
-    """Create an Azure OpenAI chat completion service."""
-    return AzureChatCompletion(
-        deployment_name=deployment,
-        endpoint=settings.azure_openai_endpoint,
-        api_key=settings.azure_openai_api_key,
-        api_version=settings.azure_openai_api_version,
-    )
-
-
-def _build_agents(selected_names: list[str] | None = None) -> tuple[list[ChatCompletionAgent], AzureChatCompletion]:
-    """Build agents filtered by selected_names. Returns agents + manager service."""
+def _build_agents(selected_names: list[str] | None = None) -> tuple[list[Agent], Agent]:
+    """Build agents filtered by selected_names. Returns agents + manager agent."""
     mini = settings.azure_openai_gpt4o_mini_deployment
     full = settings.azure_openai_gpt4o_deployment
     deployment_map = {"mini": mini, "full": full}
@@ -93,16 +104,21 @@ def _build_agents(selected_names: list[str] | None = None) -> tuple[list[ChatCom
         defn = AGENT_DEFS.get(name)
         if not defn:
             continue
-        agents.append(ChatCompletionAgent(
+        agents.append(Agent(
+            _make_chat_client(deployment_map[defn["deployment"]]),
+            defn["instructions"],
             name=name,
             description=defn["description"],
-            instructions=defn["instructions"],
-            service=_make_service(deployment_map[defn["deployment"]]),
-            plugins=[defn["plugin_class"]()],
+            tools=defn["tools"],
         ))
 
-    manager_service = _make_service(full)
-    return agents, manager_service
+    manager_agent = Agent(
+        _make_chat_client(full),
+        MANAGER_INSTRUCTIONS,
+        name="Manager",
+        description="Orchestrator that coordinates specialist disaster monitoring agents",
+    )
+    return agents, manager_agent
 
 
 def _extract_structured_data(content: str) -> tuple[str, dict[str, Any] | None]:
@@ -159,70 +175,51 @@ async def run_agent_query(query: str) -> AsyncIterator[dict[str, Any]]:
     yield {"type": "status", "agent": "manager", "message": "Planning approach..."}
 
     # Step 2: Build only selected agents
-    agents, manager_service = _build_agents(classification.agents)
+    agents, manager_agent = _build_agents(classification.agents)
 
-    # Collect agent responses via callback
-    response_queue: asyncio.Queue[dict] = asyncio.Queue()
+    yield {"type": "status", "agent": "manager", "message": "Delegating to specialist agents..."}
+    yield make_timeline_step("manager", "delegate", f"Delegating to {len(agents)} specialist agents")
 
-    def on_agent_response(message: ChatMessageContent) -> None:
-        agent_name = message.name or "unknown"
-        content = message.content or ""
-        response_queue.put_nowait({
-            "type": "agent_response",
-            "agent": agent_name,
-            "content": content,
-        })
-
-    orchestration = MagenticOrchestration(
-        members=agents,
-        manager=StandardMagenticManager(
-            chat_completion_service=manager_service,
-        ),
-        agent_response_callback=on_agent_response,
-    )
-
-    runtime = InProcessRuntime()
-    runtime.start()
+    # Build the Magentic workflow
+    workflow = MagenticBuilder(
+        participants=agents,
+        manager_agent=manager_agent,
+        max_round_count=8,
+        max_stall_count=3,
+    ).build()
 
     try:
-        yield {"type": "status", "agent": "manager", "message": "Delegating to specialist agents..."}
-        yield make_timeline_step("manager", "delegate", f"Delegating to {len(agents)} specialist agents")
-
-        orchestration_result = await orchestration.invoke(
-            task=f"{MANAGER_INSTRUCTIONS}\n\nUser query: {query}",
-            runtime=runtime,
-        )
-
-        result_task = asyncio.create_task(orchestration_result.get())
-
-        # Track which agents have responded for timeline
         agents_seen: set[str] = set()
+        final_content = ""
 
-        while not result_task.done():
-            try:
-                msg = await asyncio.wait_for(response_queue.get(), timeout=1.0)
-                yield msg
-                # Emit timeline step for first response from each agent
-                agent_name = msg.get("agent", "unknown")
+        async for event in workflow.run(f"{MANAGER_INSTRUCTIONS}\n\nUser query: {query}", stream=True):
+            if event.type == "output" and isinstance(event.data, AgentResponseUpdate):
+                # Intermediate agent response
+                agent_name = event.executor_id or "unknown"
+                content = event.data.text or ""
+
+                yield {
+                    "type": "agent_response",
+                    "agent": agent_name,
+                    "content": content,
+                }
+
                 if agent_name not in agents_seen:
                     agents_seen.add(agent_name)
-                    content_preview = (msg.get("content", "") or "")[:80]
+                    content_preview = content[:80]
                     yield make_timeline_step(agent_name, "response", content_preview)
-            except asyncio.TimeoutError:
-                continue
 
-        final = await result_task
-        final_content = final.content if hasattr(final, "content") else str(final)
-
-        # Drain remaining queued messages
-        while not response_queue.empty():
-            msg = response_queue.get_nowait()
-            yield msg
-            agent_name = msg.get("agent", "unknown")
-            if agent_name not in agents_seen:
-                agents_seen.add(agent_name)
-                content_preview = (msg.get("content", "") or "")[:80]
-                yield make_timeline_step(agent_name, "response", content_preview)
+            elif event.type == "output":
+                # Final output — extract messages
+                data = event.data
+                if isinstance(data, list) and data:
+                    # List of Messages — take the last one
+                    last = data[-1]
+                    final_content = last.text if isinstance(last, Message) else str(last)
+                elif isinstance(data, Message):
+                    final_content = data.text
+                else:
+                    final_content = str(data)
 
         # Extract structured data from final answer
         narrative, structured = _extract_structured_data(final_content)
@@ -234,7 +231,6 @@ async def run_agent_query(query: str) -> AsyncIterator[dict[str, Any]]:
             "content": narrative,
         }
         if structured:
-            # Spread structured fields into the final answer event
             if "risk_assessment" in structured:
                 final_event["risk_assessment"] = structured["risk_assessment"]
             if "source_breakdown" in structured:
@@ -245,6 +241,12 @@ async def run_agent_query(query: str) -> AsyncIterator[dict[str, Any]]:
                 final_event["recommendations"] = structured["recommendations"]
             if "overall_confidence" in structured:
                 final_event["overall_confidence"] = structured["overall_confidence"]
+            # Phase 1: Risk drivers
+            if "risk_drivers" in structured:
+                final_event["risk_drivers"] = structured["risk_drivers"]
+            # Phase 2: Trend data
+            if "trend" in structured:
+                final_event["trend"] = structured["trend"]
 
         yield final_event
 
@@ -255,5 +257,3 @@ async def run_agent_query(query: str) -> AsyncIterator[dict[str, Any]]:
             "type": "error",
             "message": f"Agent error: {str(e)}",
         }
-    finally:
-        await runtime.stop_when_idle()

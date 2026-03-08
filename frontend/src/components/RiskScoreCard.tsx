@@ -1,6 +1,6 @@
 "use client";
 
-import type { RiskAssessmentData, SourceBreakdown } from "@/lib/api";
+import type { RiskAssessmentData, RiskDriver, SourceBreakdown, TrendData } from "@/lib/api";
 
 const LEVEL_COLORS: Record<string, { bg: string; text: string; bar: string }> = {
   Normal: { bg: "bg-green-500/10", text: "text-green-400", bar: "bg-green-500" },
@@ -15,11 +15,28 @@ const COMPONENT_LABELS: Record<string, string> = {
   confidence: "Data Confidence",
 };
 
+const TREND_CONFIG: Record<string, { arrow: string; color: string }> = {
+  "Rapid Escalation": { arrow: "\u2191\u2191", color: "text-red-400" },
+  Increasing: { arrow: "\u2191", color: "text-amber-400" },
+  Stable: { arrow: "\u2192", color: "text-gray-400" },
+  Decreasing: { arrow: "\u2193", color: "text-green-400" },
+  "Insufficient Data": { arrow: "\u2014", color: "text-gray-600" },
+};
+
+const DRIVER_DOT_COLORS: Record<string, string> = {
+  event_severity: "bg-red-400",
+  fire_density: "bg-orange-400",
+  media_spike: "bg-blue-400",
+  confidence: "bg-purple-400",
+};
+
 interface RiskScoreCardProps {
   riskAssessment: RiskAssessmentData;
   sourceBreakdown?: SourceBreakdown[];
   recommendations?: string[];
   overallConfidence?: number;
+  riskDrivers?: RiskDriver[];
+  trend?: TrendData;
 }
 
 export default function RiskScoreCard({
@@ -27,6 +44,8 @@ export default function RiskScoreCard({
   sourceBreakdown,
   recommendations,
   overallConfidence,
+  riskDrivers,
+  trend,
 }: RiskScoreCardProps) {
   const levelStyle = LEVEL_COLORS[riskAssessment.risk_level] || LEVEL_COLORS.Normal;
 
@@ -44,6 +63,14 @@ export default function RiskScoreCard({
           >
             {riskAssessment.risk_level.toUpperCase()}
           </span>
+          {/* Trend indicator */}
+          {trend && trend.trend !== "Insufficient Data" && (
+            <span className={`text-xs font-medium ${TREND_CONFIG[trend.trend]?.color || "text-gray-500"}`}>
+              {TREND_CONFIG[trend.trend]?.arrow}{" "}
+              {trend.pct_change > 0 ? "+" : ""}
+              {trend.pct_change.toFixed(1)}%
+            </span>
+          )}
         </div>
         {overallConfidence != null && (
           <span className="text-xs text-gray-500">
@@ -51,6 +78,29 @@ export default function RiskScoreCard({
           </span>
         )}
       </div>
+
+      {/* Primary Risk Drivers */}
+      {riskDrivers && riskDrivers.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-xs text-gray-500 font-medium">Primary Risk Drivers</div>
+          <div className="space-y-1">
+            {riskDrivers.map((driver) => (
+              <div key={driver.component} className="flex items-start gap-2 text-xs">
+                <span
+                  className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${
+                    DRIVER_DOT_COLORS[driver.component] || "bg-gray-400"
+                  }`}
+                />
+                <div>
+                  <span className="text-gray-300 font-medium">{driver.label}</span>
+                  <span className="text-gray-600 ml-1">({driver.value.toFixed(1)}/5)</span>
+                  <p className="text-gray-500">{driver.reason}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Component bars */}
       {riskAssessment.components && (
@@ -71,6 +121,19 @@ export default function RiskScoreCard({
               </span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Trend summary */}
+      {trend && trend.data_points >= 2 && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-gray-500">Trend:</span>
+          <span className={`font-medium ${TREND_CONFIG[trend.trend]?.color || "text-gray-400"}`}>
+            {trend.trend}
+          </span>
+          <span className="text-gray-600">
+            ({trend.first_score?.toFixed(1)} → {trend.last_score?.toFixed(1)} over {trend.data_points} assessments)
+          </span>
         </div>
       )}
 

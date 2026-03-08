@@ -9,9 +9,12 @@ SOURCE_WEIGHTS: dict[str, float] = {
     "NASA EONET": 0.85,
     "NASA FIRMS": 0.85,
     "GDELT": 0.6,
+    "Google News": 0.7,
     "Bluesky": 0.4,
     "ReliefWeb": 0.95,
     "local database": 0.9,
+    "Open-Meteo": 0.8,
+    "NotificationAgent": 0.95,
 }
 
 # Maximum age (hours) before freshness decays to 0

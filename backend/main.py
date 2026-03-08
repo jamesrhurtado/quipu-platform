@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.routes.alerts import router as alerts_router
 from api.routes.events import router as events_router
 from api.routes.query import router as query_router
 from api.routes.risk import router as risk_router
@@ -73,6 +74,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(alerts_router)
 app.include_router(events_router)
 app.include_router(stream_router)
 app.include_router(query_router)

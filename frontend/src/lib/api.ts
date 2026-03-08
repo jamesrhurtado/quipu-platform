@@ -53,6 +53,47 @@ export interface MapFocusInstruction {
   highlight_region?: string;
 }
 
+// Phase 1: Risk driver transparency
+export interface RiskDriver {
+  component: string;
+  label: string;
+  value: number;
+  reason: string;
+}
+
+export interface ComponentAnalysis {
+  label: string;
+  value: number;
+  weight: number;
+  weighted_contribution: number;
+  interpretation: string;
+}
+
+// Phase 2: Trend data
+export interface TrendData {
+  trend: string;
+  pct_change: number;
+  data_points: number;
+  first_score?: number;
+  last_score?: number;
+  slope_per_hour?: number;
+  history?: { risk_score: number; risk_level: string; created_at: string }[];
+}
+
+// Phase 3: Alert data
+export interface AlertData {
+  id: string;
+  region: string;
+  alert_level: "elevated" | "high" | "critical";
+  risk_score: number;
+  risk_level: string;
+  explanation: string;
+  drivers: RiskDriver[];
+  actions_taken: { type: string; target: string; label: string; status: string; message: string }[];
+  acknowledged: boolean;
+  created_at: string;
+}
+
 export interface AgentChunk {
   type:
     | "status"
@@ -78,6 +119,10 @@ export interface AgentChunk {
   map_focus?: MapFocusInstruction;
   recommendations?: string[];
   overall_confidence?: number;
+  // Phase 1: risk drivers
+  risk_drivers?: RiskDriver[];
+  // Phase 2: trend
+  trend?: TrendData;
 }
 
 export async function fetchEvents(params?: {
@@ -163,6 +208,12 @@ export function createSSEConnection(
   es.addEventListener("poll_complete", (e) => {
     try {
       onEvent("poll_complete", JSON.parse(e.data));
+    } catch {}
+  });
+
+  es.addEventListener("alert", (e) => {
+    try {
+      onEvent("alert", JSON.parse(e.data));
     } catch {}
   });
 

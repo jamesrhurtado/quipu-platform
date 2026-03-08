@@ -9,8 +9,10 @@ import {
   AgentChunk,
   MapFocusInstruction,
   RiskAssessmentData,
+  RiskDriver,
   SourceBreakdown,
   TimelineStep,
+  TrendData,
   streamQuery,
 } from "@/lib/api";
 
@@ -23,6 +25,8 @@ interface Message {
   sourceBreakdown?: SourceBreakdown[];
   recommendations?: string[];
   overallConfidence?: number;
+  riskDrivers?: RiskDriver[];
+  trend?: TrendData;
 }
 
 interface ChatInterfaceProps {
@@ -59,6 +63,8 @@ export default function ChatInterface({ onMapFocus }: ChatInterfaceProps) {
       let recommendations: string[] | undefined;
       let overallConfidence: number | undefined;
       let mapFocus: MapFocusInstruction | undefined;
+      let riskDrivers: RiskDriver[] | undefined;
+      let trend: TrendData | undefined;
       const collectedTimeline: TimelineStep[] = [];
       const agentMessages: Message[] = [];
 
@@ -108,6 +114,8 @@ export default function ChatInterface({ onMapFocus }: ChatInterfaceProps) {
             recommendations = chunk.recommendations;
             overallConfidence = chunk.overall_confidence;
             mapFocus = chunk.map_focus;
+            riskDrivers = chunk.risk_drivers;
+            trend = chunk.trend;
             break;
 
           case "error":
@@ -136,6 +144,8 @@ export default function ChatInterface({ onMapFocus }: ChatInterfaceProps) {
           sourceBreakdown,
           recommendations,
           overallConfidence,
+          riskDrivers,
+          trend,
         },
       ]);
     } catch (err) {
@@ -177,7 +187,7 @@ export default function ChatInterface({ onMapFocus }: ChatInterfaceProps) {
                 &quot;Are there active fires in the Amazon?&quot;
               </p>
               <p className="text-gray-700">
-                &quot;Generate a situation report for Central America&quot;
+                &quot;Is the risk increasing in Central America?&quot;
               </p>
             </div>
           </div>
@@ -233,6 +243,8 @@ export default function ChatInterface({ onMapFocus }: ChatInterfaceProps) {
                         sourceBreakdown={msg.sourceBreakdown}
                         recommendations={msg.recommendations}
                         overallConfidence={msg.overallConfidence}
+                        riskDrivers={msg.riskDrivers}
+                        trend={msg.trend}
                       />
                     </div>
                   )}

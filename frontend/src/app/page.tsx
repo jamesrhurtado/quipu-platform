@@ -2,26 +2,37 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useRef, useState } from "react";
+import AlertBanner from "@/components/AlertBanner";
 import ChatInterface from "@/components/ChatInterface";
 import EventFeed from "@/components/EventFeed";
 import { useEvents } from "@/hooks/useEvents";
 import { useSSE } from "@/hooks/useSSE";
-import type { MapFocusInstruction } from "@/lib/api";
+import type { AlertData, MapFocusInstruction } from "@/lib/api";
 
 const Map = dynamic(() => import("@/components/Map"), { ssr: false });
 
 export default function Dashboard() {
   const { events, loading, refetch } = useEvents();
-  const { connected } = useSSE(refetch);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [mapFocus, setMapFocus] = useState<MapFocusInstruction | null>(null);
   const [feedHeightPct, setFeedHeightPct] = useState(55);
   const rightPanelRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
+  const [alerts, setAlerts] = useState<AlertData[]>([]);
 
   const handleMapFocus = useCallback((focus: MapFocusInstruction) => {
     setMapFocus(focus);
   }, []);
+
+  const handleAlert = useCallback((alert: AlertData) => {
+    setAlerts((prev) => [alert, ...prev]);
+  }, []);
+
+  const handleDismissAlert = useCallback((id: string) => {
+    setAlerts((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
+  const { connected } = useSSE(refetch, handleAlert);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -46,6 +57,15 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-screen">
+      {/* Alert Banners */}
+      {alerts.map((alert) => (
+        <AlertBanner
+          key={alert.id}
+          alert={alert}
+          onDismiss={handleDismissAlert}
+        />
+      ))}
+
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800">
         <div className="flex items-center gap-3">

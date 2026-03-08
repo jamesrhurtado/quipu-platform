@@ -59,3 +59,34 @@ CREATE TABLE IF NOT EXISTS risk_assessments (
 
 CREATE INDEX IF NOT EXISTS idx_risk_region ON risk_assessments(region);
 CREATE INDEX IF NOT EXISTS idx_risk_created_at ON risk_assessments(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    region VARCHAR(255) NOT NULL,
+    alert_level VARCHAR(20) NOT NULL CHECK (alert_level IN ('elevated', 'high', 'critical')),
+    risk_score FLOAT NOT NULL,
+    risk_level VARCHAR(20) NOT NULL,
+    explanation TEXT,
+    drivers JSONB,
+    actions_taken JSONB,
+    acknowledged BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_alerts_region ON alerts(region);
+CREATE INDEX IF NOT EXISTS idx_alerts_created_at ON alerts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_alerts_acknowledged ON alerts(acknowledged) WHERE acknowledged = false;
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    channel VARCHAR(50) NOT NULL,
+    recipient VARCHAR(255) NOT NULL,
+    alert_level VARCHAR(20),
+    region VARCHAR(255),
+    status VARCHAR(20) NOT NULL DEFAULT 'sent',
+    payload JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_region ON notifications(region);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);

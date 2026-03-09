@@ -1,10 +1,10 @@
-# SENTINEL
+# Quipu
 
 **AI early warning system for disaster monitoring in Latin America, powered by 7 specialized agents.**
 
-Sentinel is an autonomous monitoring system that continuously ingests data from 8+ live sources — USGS, GDACS, NASA EONET, NASA FIRMS, GDELT, ReliefWeb, Bluesky, and Open-Meteo — and uses a team of 7 AI agents to analyze, correlate, and deliver actionable risk assessments through a real-time dashboard, Microsoft Teams, and Bluesky.
+Quipu is an autonomous monitoring system that continuously ingests data from 8+ live sources — USGS, GDACS, NASA EONET, NASA FIRMS, GDELT, ReliefWeb, Bluesky, and Open-Meteo — and uses a team of 7 AI agents to analyze, correlate, and deliver actionable risk assessments through a real-time dashboard, Microsoft Teams, and Bluesky.
 
-Ask a question in natural language. Sentinel figures out which agents to activate, queries the right APIs, scores source reliability, computes a composite risk assessment, detects rainfall anomalies, and sends real alerts to your Teams channel — all in seconds.
+Ask a question in natural language. Quipu figures out which agents to activate, queries the right APIs, scores source reliability, computes a composite risk assessment, detects rainfall anomalies, and sends real alerts to your Teams channel — all in seconds.
 
 ![Python](https://img.shields.io/badge/python-3.13-blue)
 ![Next.js](https://img.shields.io/badge/next.js-14-black)
@@ -13,11 +13,11 @@ Ask a question in natural language. Sentinel figures out which agents to activat
 
 ---
 
-## Why Sentinel Exists
+## Why Quipu Exists
 
 Small municipalities in Peru lack dedicated monitoring teams. When a 7.2 earthquake hits near Cusco during heavy rainfall season, information fractures across dozens of sources: USGS reports the seismology, GDACS estimates impact, weather data shows abnormal precipitation, NASA detects landslide risk, news outlets report casualties at different speeds, and social media fills with unverified claims. Emergency coordinators must manually piece this together under time pressure.
 
-Sentinel automates that synthesis. It treats each data domain as a specialist agent, orchestrates them dynamically based on the query, computes compound risks (earthquake + heavy rainfall = landslide danger), and delivers alerts directly to Microsoft Teams and Bluesky — not just raw data, but assessed, scored, and actionable.
+Quipu automates that synthesis. It treats each data domain as a specialist agent, orchestrates them dynamically based on the query, computes compound risks (earthquake + heavy rainfall = landslide danger), and delivers alerts directly to Microsoft Teams and Bluesky — not just raw data, but assessed, scored, and actionable.
 
 ---
 
@@ -222,7 +222,7 @@ Open **http://localhost:3000**.
 ### 5. (Optional) Set up Teams webhook
 
 1. Open Teams -> channel -> `...` -> **Manage channel** -> **Connectors**
-2. Find **Incoming Webhook** -> **Configure** -> name it `Sentinel Alerts` -> **Create**
+2. Find **Incoming Webhook** -> **Configure** -> name it `Quipu Alerts` -> **Create**
 3. Copy the URL -> add to `.env`: `TEAMS_WEBHOOK_URL=https://...`
 
 If connectors are disabled, use **Power Automate**: trigger "When a HTTP request is received" -> action "Post message in channel" -> use the HTTP URL.
@@ -258,7 +258,7 @@ Each notification channel can be independently toggled on/off. This lets you use
 | `TEAMS_ENABLED` | `true` | Master switch for Teams notifications. Set `false` to disable all Teams alerts even if webhook URL is configured. |
 | `TEAMS_WEBHOOK_URL` | `""` | Teams Incoming Webhook URL. When empty, Teams alerts are simulated. |
 | `BLUESKY_NOTIFICATIONS_ENABLED` | `true` | Master switch for Bluesky alert posts. Set `false` to disable all Bluesky notifications. |
-| `BLUESKY_HANDLE` | `""` | Bluesky handle (e.g., `sentinel.bsky.social`). When empty, Bluesky alerts are simulated. |
+| `BLUESKY_HANDLE` | `""` | Bluesky handle (e.g., `quipu.bsky.social`). When empty, Bluesky alerts are simulated. |
 | `BLUESKY_APP_PASSWORD` | `""` | Bluesky app password (generate at bsky.app Settings -> App Passwords). |
 | `DASHBOARD_URL` | `http://localhost:3000` | URL included in Teams Adaptive Card "View Dashboard" button. |
 
@@ -273,14 +273,14 @@ BLUESKY_NOTIFICATIONS_ENABLED=false
 # Bluesky only (no Teams)
 TEAMS_ENABLED=false
 BLUESKY_NOTIFICATIONS_ENABLED=true
-BLUESKY_HANDLE=sentinel.bsky.social
+BLUESKY_HANDLE=quipu.bsky.social
 BLUESKY_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
 
 # Both channels active
 TEAMS_ENABLED=true
 TEAMS_WEBHOOK_URL=https://your-org.webhook.office.com/...
 BLUESKY_NOTIFICATIONS_ENABLED=true
-BLUESKY_HANDLE=sentinel.bsky.social
+BLUESKY_HANDLE=quipu.bsky.social
 BLUESKY_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
 
 # All notifications disabled (simulation only)

@@ -24,15 +24,15 @@ COOLDOWN_MINUTES = 30
 # Simulated notification targets by alert level
 NOTIFICATION_TARGETS: dict[str, list[dict[str, str]]] = {
     "elevated": [
-        {"type": "email", "target": "monitoring@sentinel-ops.lat", "label": "Sentinel Ops Team"},
+        {"type": "email", "target": "monitoring@sentinel-ops.lat", "label": "Quipu Ops Team"},
     ],
     "high": [
-        {"type": "email", "target": "monitoring@sentinel-ops.lat", "label": "Sentinel Ops Team"},
+        {"type": "email", "target": "monitoring@sentinel-ops.lat", "label": "Quipu Ops Team"},
         {"type": "webhook", "target": "https://hooks.sentinel-ops.lat/alerts", "label": "Alert Dashboard"},
         {"type": "email", "target": "emergencias@defensa-civil.gob.pe", "label": "Civil Defense"},
     ],
     "critical": [
-        {"type": "email", "target": "monitoring@sentinel-ops.lat", "label": "Sentinel Ops Team"},
+        {"type": "email", "target": "monitoring@sentinel-ops.lat", "label": "Quipu Ops Team"},
         {"type": "webhook", "target": "https://hooks.sentinel-ops.lat/alerts", "label": "Alert Dashboard"},
         {"type": "email", "target": "emergencias@defensa-civil.gob.pe", "label": "Civil Defense"},
         {"type": "sms", "target": "+51-1-XXX-XXXX", "label": "Emergency Coordinator"},
@@ -92,7 +92,7 @@ async def _send_notifications(
                 "target": settings.teams_webhook_url[:50],
                 "label": "Microsoft Teams",
                 "status": result["status"],
-                "message": f"[SENTINEL ALERT] {alert_level.upper()} risk for {region} (score: {risk_score}/5)",
+                "message": f"[QUIPU ALERT] {alert_level.upper()} risk for {region} (score: {risk_score}/5)",
             })
         except Exception as e:
             logger.error(f"Teams notification error: {e}")
@@ -111,7 +111,7 @@ async def _send_notifications(
             "target": "(not configured)",
             "label": "Microsoft Teams",
             "status": "simulated",
-            "message": f"[SENTINEL ALERT] {alert_level.upper()} risk for {region} (score: {risk_score}/5)",
+            "message": f"[QUIPU ALERT] {alert_level.upper()} risk for {region} (score: {risk_score}/5)",
         })
 
     # Bluesky: real delivery if enabled and credentials configured
@@ -121,7 +121,7 @@ async def _send_notifications(
 
             level_es = {"elevated": "ELEVADO", "high": "ALTO", "critical": "CRITICO"}.get(alert_level, alert_level.upper())
             text = (
-                f"ALERTA SENTINEL — {level_es}\n"
+                f"ALERTA QUIPU — {level_es}\n"
                 f"{region} — Riesgo: {risk_score}/5\n"
                 f"{explanation[:120]}"
             )
@@ -151,7 +151,7 @@ async def _send_notifications(
             "target": target["target"],
             "label": target["label"],
             "status": "simulated",
-            "message": f"[SENTINEL ALERT] {alert_level.upper()} risk for {region} (score: {risk_score}/5)",
+            "message": f"[QUIPU ALERT] {alert_level.upper()} risk for {region} (score: {risk_score}/5)",
         })
         logger.info(
             f"[SIMULATED] {target['type']} notification to {target['target']} "

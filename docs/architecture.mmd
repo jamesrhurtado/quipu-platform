@@ -1,93 +1,118 @@
 ---
-title: Sentinel — 7-Agent Early Warning System
+title: Quipu — 7-Agent Early Warning System (Azure Deployment)
 ---
 flowchart TB
-    subgraph Frontend["Next.js Frontend"]
-        Map["Leaflet Map"]
-        Chat["Chat Interface"]
-        Timeline["Agent Timeline"]
-        RiskCard["Risk ScoreCard"]
-        AlertBanner["Alert Banner<br/><i>sent/failed/simulated badges</i>"]
-    end
-
-    subgraph Backend["FastAPI Backend"]
+    subgraph Azure["☁️ Azure Cloud Platform"]
         direction TB
 
-        subgraph Orchestration["Magentic Orchestration"]
-            direction LR
-            Classifier["Query Classifier<br/><i>keyword routing</i>"]
-
-            subgraph Agents["7 Specialist Agents"]
-                direction TB
-                Manager["Manager<br/><b>GPT-4o</b><br/>Orchestrates & synthesizes"]
-
-                subgraph DataAgents["Data Collection"]
-                    direction LR
-                    Emergency["Emergency<br/>Monitor<br/><i>USGS, GDACS,<br/>EONET, PostGIS</i>"]
-                    Social["Social & News<br/>Agent<br/><i>GDELT, Bluesky,<br/>ReliefWeb</i>"]
-                    Fire["Fire Monitor<br/>Agent<br/><i>NASA FIRMS</i>"]
-                    Weather["Weather<br/>Agent<br/><i>Open-Meteo<br/>Rainfall Anomaly</i>"]
-                end
-
-                subgraph ProcessAgents["Processing & Delivery"]
-                    direction LR
-                    Analysis["Analysis<br/>Agent<br/><i>Risk Engine,<br/>Trends, Sitreps</i>"]
-                    Notification["Notification<br/>Agent<br/><i>Teams, Bluesky<br/>Audit Trail</i>"]
-                end
+        subgraph StaticWebApps["Azure Static Web Apps (Free)"]
+            subgraph Frontend["Next.js Frontend"]
+                direction LR
+                Map["Leaflet Map"]
+                Chat["Chat Interface"]
+                Timeline["Agent Timeline"]
+                RiskCard["Risk ScoreCard"]
+                AlertBanner["Alert Banner<br/><i>sent/failed/simulated</i>"]
             end
         end
 
-        subgraph Background["Background Services"]
-            direction LR
-            Poller["Poller<br/><i>every 5 min</i>"]
-            AutoRisk["Auto-Risk<br/><i>zero LLM cost</i>"]
-            AlertEngine["Alert Engine<br/><i>threshold + cooldown</i>"]
-            SSE["SSE Manager<br/><i>real-time push</i>"]
+        subgraph ContainerApps["Azure Container Apps (Free Tier)"]
+            subgraph Backend["FastAPI Backend"]
+                direction TB
+
+                subgraph Orchestration["Magentic Orchestration"]
+                    direction LR
+                    Classifier["Query Classifier<br/><i>keyword routing</i>"]
+
+                    subgraph Agents["7 Specialist Agents"]
+                        direction TB
+                        Manager["Manager<br/><b>GPT-4o</b><br/>Orchestrates & synthesizes"]
+
+                        subgraph DataAgents["Data Collection"]
+                            direction LR
+                            Emergency["Emergency<br/>Monitor<br/><i>USGS, GDACS,<br/>EONET, PostGIS</i>"]
+                            Social["Social & News<br/>Agent<br/><i>Google News,<br/>Bluesky, ReliefWeb</i>"]
+                            Fire["Fire Monitor<br/>Agent<br/><i>NASA FIRMS</i>"]
+                            Weather["Weather<br/>Agent<br/><i>Open-Meteo<br/>Rainfall Anomaly</i>"]
+                        end
+
+                        subgraph ProcessAgents["Processing & Delivery"]
+                            direction LR
+                            Analysis["Analysis<br/>Agent<br/><i>Risk Engine,<br/>Trends, Sitreps</i>"]
+                            Notification["Notification<br/>Agent<br/><i>Teams, Bluesky<br/>Audit Trail</i>"]
+                        end
+                    end
+                end
+
+                subgraph Background["Background Services"]
+                    direction LR
+                    Poller["Poller<br/><i>every 5 min</i>"]
+                    AutoRisk["Auto-Risk<br/><i>zero LLM cost</i>"]
+                    AlertEngine["Alert Engine<br/><i>threshold + cooldown</i>"]
+                    SSE["SSE Manager<br/><i>real-time push</i>"]
+                end
+
+                Scoring["Source Scoring Layer<br/><i>reliability × freshness</i>"]
+            end
         end
 
-        Scoring["Source Scoring Layer<br/><i>reliability x freshness</i>"]
+        subgraph AzureOpenAI["Azure OpenAI Service"]
+            GPT4o["GPT-4o<br/><i>Manager + Analysis</i>"]
+            GPT4oMini["GPT-4o-mini<br/><i>5 specialist agents</i>"]
+        end
+
+        subgraph AzureDB["Azure Database for PostgreSQL Flexible Server"]
+            subgraph PostGIS["PostgreSQL + PostGIS"]
+                Events[("events")]
+                Risks[("risk_assessments")]
+                Alerts[("alerts")]
+                Notifications[("notifications")]
+            end
+        end
     end
 
-    subgraph DB["PostgreSQL + PostGIS"]
-        Events[("events")]
-        Risks[("risk_assessments")]
-        Alerts[("alerts")]
-        Notifications[("notifications")]
-    end
-
-    subgraph External["External APIs"]
+    subgraph External["External Data Sources"]
         direction LR
-        USGS["USGS"]
-        GDACS["GDACS"]
-        EONET["NASA EONET"]
-        FIRMS["NASA FIRMS"]
-        GDELT["GDELT"]
-        BSky["Bluesky"]
-        RWeb["ReliefWeb"]
-        OMet["Open-Meteo"]
+        USGS["USGS<br/><i>Earthquakes</i>"]
+        GDACS["GDACS<br/><i>Multi-hazard</i>"]
+        EONET["NASA EONET<br/><i>Natural events</i>"]
+        FIRMS["NASA FIRMS<br/><i>Fire detection</i>"]
+        GNews["Google News<br/><i>RSS feed</i>"]
+        BSky["Bluesky<br/><i>Social signals</i>"]
+        RWeb["ReliefWeb<br/><i>UN reports</i>"]
+        OMet["Open-Meteo<br/><i>Precipitation</i>"]
     end
 
     subgraph Delivery["Notification Channels"]
         direction LR
         Teams["Microsoft Teams<br/><i>Adaptive Cards</i>"]
-        BskyPost["Bluesky<br/><i>Bilingual Posts</i>"]
+        BskyPost["Bluesky<br/><i>Bilingual advisories</i>"]
     end
 
-    %% Frontend connections
-    Frontend -->|"SSE + REST"| Backend
+    %% Frontend ↔ Backend
+    StaticWebApps -->|"SSE + REST"| ContainerApps
 
-    %% Classifier flow
+    %% Agent orchestration flow
     Classifier --> Manager
     Manager --> DataAgents
     Manager --> ProcessAgents
     DataAgents --> Scoring
     Scoring --> Analysis
 
+    %% LLM calls
+    Manager -.->|"LLM"| AzureOpenAI
+    Emergency -.->|"LLM"| GPT4oMini
+    Social -.->|"LLM"| GPT4oMini
+    Fire -.->|"LLM"| GPT4oMini
+    Weather -.->|"LLM"| GPT4oMini
+    Notification -.->|"LLM"| GPT4oMini
+    Analysis -.->|"LLM"| GPT4o
+
     %% Background flow
     Poller --> AutoRisk
     AutoRisk --> AlertEngine
     AlertEngine --> SSE
-    SSE --> Frontend
+    SSE --> StaticWebApps
 
     %% DB connections
     Poller --> Events
@@ -95,12 +120,12 @@ flowchart TB
     AlertEngine --> Alerts
     Notification --> Notifications
 
-    %% External APIs
+    %% External API connections
     Emergency -.-> USGS
     Emergency -.-> GDACS
     Emergency -.-> EONET
     Fire -.-> FIRMS
-    Social -.-> GDELT
+    Social -.-> GNews
     Social -.-> BSky
     Social -.-> RWeb
     Weather -.-> OMet
@@ -122,10 +147,14 @@ flowchart TB
     classDef delivery fill:#27AE60,stroke:#1E8449,color:#fff
     classDef db fill:#8E44AD,stroke:#6C3483,color:#fff
     classDef bg fill:#2C3E50,stroke:#1A252F,color:#fff
+    classDef azure fill:#0078D4,stroke:#005A9E,color:#fff
+    classDef llm fill:#FF6F00,stroke:#E65100,color:#fff
 
     class Emergency,Social,Fire,Weather,Analysis,Notification agent
     class Manager manager
-    class USGS,GDACS,EONET,FIRMS,GDELT,BSky,RWeb,OMet external
+    class USGS,GDACS,EONET,FIRMS,GNews,BSky,RWeb,OMet external
     class Teams,BskyPost delivery
     class Events,Risks,Alerts,Notifications db
     class Poller,AutoRisk,AlertEngine,SSE bg
+    class StaticWebApps,ContainerApps,AzureDB azure
+    class GPT4o,GPT4oMini llm

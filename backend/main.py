@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    logger.info("Starting Sentinel Agent backend...")
+    logger.info("Starting Quipu backend...")
     await init_db()
 
     # Start background tasks
@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Disaster & Climate Risk Sentinel",
+    title="Quipu — Disaster & Climate Risk Monitor",
     description="Multi-agent AI system for disaster monitoring in Latin America",
     version="0.1.0",
     lifespan=lifespan,
@@ -83,4 +83,4 @@ app.include_router(risk_router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "sentinel-agent"}
+    return {"status": "ok", "service": "quipu"}

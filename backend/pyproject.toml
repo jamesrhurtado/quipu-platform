@@ -1,7 +1,7 @@
 [project]
 name = "sentinel-agent-backend"
 version = "0.1.0"
-description = "Disaster & Climate Risk Sentinel — Multi-Agent Backend"
+description = "Quipu — Disaster & Climate Risk Multi-Agent Backend"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115.0",

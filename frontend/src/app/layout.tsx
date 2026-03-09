@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sentinel — Disaster & Climate Risk Monitor",
+  title: "Quipu — Disaster & Climate Risk Monitor",
   description:
     "Multi-agent AI system for real-time disaster monitoring in Latin America",
 };

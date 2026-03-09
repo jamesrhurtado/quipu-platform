@@ -54,7 +54,7 @@ def build_adaptive_card(
                     "body": [
                         {
                             "type": "TextBlock",
-                            "text": f"SENTINEL ALERT — {alert_level.upper()}",
+                            "text": f"QUIPU ALERT — {alert_level.upper()}",
                             "weight": "Bolder",
                             "size": "Large",
                             "color": accent,

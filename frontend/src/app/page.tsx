@@ -70,7 +70,7 @@ export default function Dashboard() {
       <header className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-bold text-sentinel-500">
-            SENTINEL
+            Quipu
           </h1>
           <span className="text-xs text-gray-400">
             Disaster & Climate Risk Monitor

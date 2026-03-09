@@ -175,11 +175,11 @@ async def post_bluesky_alert(
 
     # Bilingual text: Spanish first, English second
     text = (
-        f"ALERTA SENTINEL — {level_es}\n"
+        f"ALERTA QUIPU — {level_es}\n"
         f"{region} — Riesgo: {risk_score}/5\n"
         f"{summary[:120]}\n"
         f"---\n"
-        f"SENTINEL ALERT — {alert_level.upper()}\n"
+        f"QUIPU ALERT — {alert_level.upper()}\n"
         f"Risk: {risk_score}/5 | {region}"
     )
 

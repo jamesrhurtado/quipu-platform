@@ -169,7 +169,7 @@ export default function ChatInterface({ onMapFocus }: ChatInterfaceProps) {
     <div className="flex flex-col h-full">
       <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-300">
-          Ask Sentinel
+          Ask Quipu
         </h2>
         {activeAgent && <AgentStatus agent={activeAgent} />}
       </div>

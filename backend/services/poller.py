@@ -239,6 +239,7 @@ MONITORED_REGIONS = {
     "Piura, Peru": {"min_lat": -6, "max_lat": -4, "min_lon": -81, "max_lon": -79},
     "Arequipa, Peru": {"min_lat": -18, "max_lat": -15, "min_lon": -73, "max_lon": -70},
     "Cajamarca, Peru": {"min_lat": -8, "max_lat": -4, "min_lon": -80, "max_lon": -77},
+    "San Ramon, Chanchamayo, Peru": {"min_lat": -12, "max_lat": -10, "min_lon": -76, "max_lon": -74},
 }
 
 

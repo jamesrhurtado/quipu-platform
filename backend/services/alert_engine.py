@@ -120,10 +120,19 @@ async def _send_notifications(
             from services.notifier import post_to_bluesky
 
             level_es = {"elevated": "ELEVADO", "high": "ALTO", "critical": "CRITICO"}.get(alert_level, alert_level.upper())
+            # Build driver summary
+            driver_lines = ""
+            if drivers:
+                for d in drivers[:2]:
+                    driver_lines += f"\n• {d.get('label', '')}: {d.get('reason', '')}"
             text = (
-                f"ALERTA QUIPU — {level_es}\n"
-                f"{region} — Riesgo: {risk_score}/5\n"
-                f"{explanation[:120]}"
+                f"🚨 ALERTA QUIPU — {level_es}\n"
+                f"📍 {region}\n"
+                f"⚠️ Riesgo: {risk_score}/5\n"
+                f"{driver_lines}\n"
+                f"---\n"
+                f"🚨 QUIPU ALERT — {alert_level.upper()}\n"
+                f"Risk: {risk_score}/5 | {region}"
             )
             result = await post_to_bluesky(settings.bluesky_handle, settings.bluesky_app_password, text)
             actions.append({

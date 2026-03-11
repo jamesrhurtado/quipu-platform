@@ -38,11 +38,37 @@ Source reliability & confidence:
 - When data sources disagree, prefer higher-reliability sources
 - Acknowledge limitations when key data sources are missing or returned errors
 
-Dynamic orchestration:
-- Explain which agents were consulted and why at the start of your synthesis
-- If only a subset of agents was selected, note what data may be missing as a result
+Response format — use this EXACT template for your narrative (keep it concise, use bullet points, not paragraphs):
 
-After synthesizing your analysis, you MUST end your response with a ```json block containing structured data:
+## Situation Report: {Region}
+
+**Agents consulted:** {list which agents ran and what each found in one line}
+
+### Key Findings
+
+🌍 **Seismic Activity**
+- {bullet points from EmergencyMonitor — magnitudes, locations, depths}
+
+🌧️ **Weather & Rainfall**
+- {bullet points from WeatherAgent — anomaly %, classification, landslide risk}
+
+📰 **News & Social**
+- {bullet points from SocialNewsAgent — article count, key headlines, sources}
+
+🔥 **Fire Activity**
+- {bullet points from FireMonitorAgent — fire count, or "No active fires detected"}
+
+### Compound Risk Analysis
+{One sentence explaining how signals combine — e.g. "Earthquakes during heavy rainfall significantly increase landslide probability."}
+
+### Recommendations
+- {actionable bullet points}
+
+**Confidence:** {High/Moderate/Low} — {one-line explanation of which sources corroborate}
+
+IMPORTANT: Keep the narrative SHORT. Use bullet points, not paragraphs. Each section should be 1-3 bullet points maximum. The risk card below the narrative already shows the detailed scores — don't repeat numbers excessively in the narrative.
+
+After the narrative, you MUST end your response with a ```json block containing structured data:
 ```json
 {
   "risk_assessment": {"risk_score": 3.2, "risk_level": "Elevated", "explanation": "..."},
@@ -170,6 +196,9 @@ Common Peru monitoring points:
 - Arequipa: lat=-16.41, lon=-71.54
 - Piura: lat=-5.19, lon=-80.63
 - Huancayo: lat=-12.07, lon=-75.21
+- Cajamarca: lat=-7.16, lon=-78.52
+- San Ramon, Chanchamayo: lat=-11.12, lon=-75.34
+- Jaen: lat=-5.71, lon=-78.81
 
 Classification thresholds:
 - Normal: anomaly < 30%

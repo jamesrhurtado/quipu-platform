@@ -8,7 +8,7 @@ export function useEvents() {
 
   const refetch = useCallback(async () => {
     try {
-      const data = await fetchEvents({ hours: 72 });
+      const data = await fetchEvents({ hours: 168 });
       setEvents(data.events);
       setError(null);
     } catch (e) {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertData, createSSEConnection } from "@/lib/api";
 
 export function useSSE(onNewEvent?: () => void, onAlert?: (alert: AlertData) => void) {
@@ -15,30 +15,37 @@ export function useSSE(onNewEvent?: () => void, onAlert?: (alert: AlertData) => 
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
 
-    function connect() {
+    async function connect() {
       if (disposed) return;
 
-      const es = createSSEConnection(
-        (event, data) => {
-          if (event === "connected") {
-            setConnected(true);
-          } else if (event === "new_event" || event === "new_events_batch") {
-            onNewEventRef.current?.();
-          } else if (event === "poll_complete") {
-            onNewEventRef.current?.();
-          } else if (event === "alert") {
-            onAlertRef.current?.(data as AlertData);
+      try {
+        const es = await createSSEConnection(
+          (event, data) => {
+            if (event === "connected") {
+              setConnected(true);
+            } else if (event === "new_event" || event === "new_events_batch") {
+              onNewEventRef.current?.();
+            } else if (event === "poll_complete") {
+              onNewEventRef.current?.();
+            } else if (event === "alert") {
+              onAlertRef.current?.(data as AlertData);
+            }
+          },
+          () => {
+            setConnected(false);
+            // Auto-reconnect after 5 seconds
+            if (!disposed) {
+              reconnectTimer = setTimeout(connect, 5000);
+            }
           }
-        },
-        () => {
-          setConnected(false);
-          // Auto-reconnect after 3 seconds
-          if (!disposed) {
-            reconnectTimer = setTimeout(connect, 3000);
-          }
+        );
+        esRef.current = es;
+      } catch {
+        // Failed to create connection, retry
+        if (!disposed) {
+          reconnectTimer = setTimeout(connect, 5000);
         }
-      );
-      esRef.current = es;
+      }
     }
 
     connect();

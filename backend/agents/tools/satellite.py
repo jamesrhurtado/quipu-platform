@@ -81,7 +81,7 @@ async def query_active_fires(
             timestamps.append(acq_date)
 
     return wrap_tool_result(
-        {"count": len(fires), "fires": fires[:100]},
+        {"count": len(fires), "fires": fires[:20]},
         source="NASA FIRMS",
         timestamps=timestamps,
     )

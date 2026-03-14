@@ -58,7 +58,7 @@ async def _upsert_event(conn, event: dict) -> bool:
 
 async def poll_usgs(client: httpx.AsyncClient) -> int:
     """Fetch recent earthquakes from USGS."""
-    url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson"
+    url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson"
     try:
         resp = await client.get(url, timeout=30)
         resp.raise_for_status()
@@ -190,7 +190,7 @@ async def poll_firms(client: httpx.AsyncClient) -> int:
     url = (
         f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/"
         f"{settings.nasa_firms_map_key}/VIIRS_SNPP_NRT/"
-        f"-118,-56,-34,33/1"
+        f"-118,-56,-34,33/3"
     )
     try:
         resp = await client.get(url, timeout=60)
@@ -243,73 +243,144 @@ MONITORED_REGIONS = {
 }
 
 
-async def auto_risk_step() -> None:
-    """Automatic risk assessment for monitored regions. Zero LLM cost — pure SQL + Python."""
+async def _assess_region(
+    pool,
+    region: str,
+    bbox: dict,
+    org_id: str | None = None,
+    org_config: dict | None = None,
+) -> None:
+    """Run risk assessment for a single region/zone."""
     from agents.risk_engine import compute_risk
     from services.alert_engine import evaluate_and_alert
 
-    pool = await get_pool()
+    async with pool.acquire() as conn:
+        max_sev = await conn.fetchval(
+            """
+            SELECT COALESCE(MAX(severity), 1)
+            FROM events
+            WHERE created_at > NOW() - INTERVAL '24 hours'
+              AND ST_Intersects(
+                  coordinates,
+                  ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
+              )
+            """,
+            bbox["min_lon"], bbox["min_lat"], bbox["max_lon"], bbox["max_lat"],
+        )
 
+        fire_count = await conn.fetchval(
+            """
+            SELECT COUNT(*)
+            FROM events
+            WHERE event_type = 'wildfire'
+              AND created_at > NOW() - INTERVAL '24 hours'
+              AND ST_Intersects(
+                  coordinates,
+                  ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
+              )
+            """,
+            bbox["min_lon"], bbox["min_lat"], bbox["max_lon"], bbox["max_lat"],
+        )
+
+    assessment = compute_risk(
+        region=region,
+        max_severity=float(max_sev),
+        fire_count=int(fire_count),
+        news_article_count=0,
+        avg_confidence=0.7,
+    )
+
+    # Persist risk assessment
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO risk_assessments (region, risk_score, risk_level, components, explanation, org_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            """,
+            assessment.region,
+            assessment.risk_score,
+            assessment.risk_level,
+            json.dumps(assessment.components),
+            assessment.explanation,
+            org_id,
+        )
+
+    # Evaluate alert threshold
+    if assessment.risk_score >= 3.0:
+        await evaluate_and_alert(assessment, org_id=org_id, org_config=org_config)
+
+
+async def _auto_risk_legacy() -> None:
+    """Legacy risk assessment using hardcoded MONITORED_REGIONS."""
+    pool = await get_pool()
     for region, bbox in MONITORED_REGIONS.items():
         try:
-            async with pool.acquire() as conn:
-                # Max severity in last 24h within bounding box
-                max_sev = await conn.fetchval(
-                    """
-                    SELECT COALESCE(MAX(severity), 1)
-                    FROM events
-                    WHERE created_at > NOW() - INTERVAL '24 hours'
-                      AND ST_Intersects(
-                          coordinates,
-                          ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
-                      )
-                    """,
-                    bbox["min_lon"], bbox["min_lat"], bbox["max_lon"], bbox["max_lat"],
-                )
-
-                # Fire count in last 24h
-                fire_count = await conn.fetchval(
-                    """
-                    SELECT COUNT(*)
-                    FROM events
-                    WHERE event_type = 'wildfire'
-                      AND created_at > NOW() - INTERVAL '24 hours'
-                      AND ST_Intersects(
-                          coordinates,
-                          ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
-                      )
-                    """,
-                    bbox["min_lon"], bbox["min_lat"], bbox["max_lon"], bbox["max_lat"],
-                )
-
-            assessment = compute_risk(
-                region=region,
-                max_severity=float(max_sev),
-                fire_count=int(fire_count),
-                news_article_count=0,
-                avg_confidence=0.7,
-            )
-
-            # Persist risk assessment
-            async with pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    INSERT INTO risk_assessments (region, risk_score, risk_level, components, explanation)
-                    VALUES ($1, $2, $3, $4, $5)
-                    """,
-                    assessment.region,
-                    assessment.risk_score,
-                    assessment.risk_level,
-                    json.dumps(assessment.components),
-                    assessment.explanation,
-                )
-
-            # Evaluate alert threshold
-            if assessment.risk_score >= 3.0:
-                await evaluate_and_alert(assessment)
-
+            await _assess_region(pool, region, bbox)
         except Exception as e:
             logger.error(f"Auto-risk failed for {region}: {e}")
+
+
+async def _auto_risk_multi_tenant() -> None:
+    """Multi-tenant risk assessment — iterate all active orgs and their monitored zones."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        orgs = await conn.fetch(
+            """
+            SELECT o.id, o.municipality, o.department,
+                   o.teams_webhook_url, o.teams_enabled,
+                   o.bluesky_handle, o.bluesky_app_password_encrypted, o.bluesky_enabled
+            FROM organizations o
+            WHERE o.is_active = true AND o.onboarding_completed = true
+            """
+        )
+
+    for org in orgs:
+        org_id = str(org["id"])
+
+        # Build per-org notification config
+        org_config = {
+            "teams_webhook_url": org["teams_webhook_url"],
+            "teams_enabled": org["teams_enabled"],
+            "bluesky_handle": org["bluesky_handle"],
+            "bluesky_app_password": None,
+            "bluesky_enabled": org["bluesky_enabled"],
+            "dashboard_url": settings.dashboard_url,
+        }
+        # Decrypt Bluesky password if present
+        if org["bluesky_app_password_encrypted"]:
+            try:
+                from services.encryption import decrypt
+                org_config["bluesky_app_password"] = decrypt(org["bluesky_app_password_encrypted"])
+            except Exception as e:
+                logger.error(f"Failed to decrypt Bluesky password for org {org_id}: {e}")
+
+        # Get monitored zones for this org
+        async with pool.acquire() as conn:
+            zones = await conn.fetch(
+                "SELECT name, bbox_min_lat, bbox_max_lat, bbox_min_lon, bbox_max_lon FROM monitored_zones WHERE org_id = $1",
+                org["id"],
+            )
+
+        for zone in zones:
+            region = f"{zone['name']}, {org['department'] or 'Peru'}"
+            bbox = {
+                "min_lat": zone["bbox_min_lat"],
+                "max_lat": zone["bbox_max_lat"],
+                "min_lon": zone["bbox_min_lon"],
+                "max_lon": zone["bbox_max_lon"],
+            }
+            try:
+                await _assess_region(pool, region, bbox, org_id=org_id, org_config=org_config)
+            except Exception as e:
+                logger.error(f"Auto-risk failed for {region} (org={org_id}): {e}")
+
+
+async def auto_risk_step() -> None:
+    """Automatic risk assessment. Dual-mode: legacy or multi-tenant."""
+    if settings.multi_tenant_enabled:
+        await _auto_risk_multi_tenant()
+    else:
+        await _auto_risk_legacy()
 
 
 async def run_poll_cycle(client: httpx.AsyncClient) -> dict:

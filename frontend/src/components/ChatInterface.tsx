@@ -15,6 +15,7 @@ import {
   TrendData,
   streamQuery,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth-provider";
 
 interface Message {
   role: "user" | "assistant" | "agent";
@@ -41,6 +42,10 @@ export default function ChatInterface({ onMapFocus }: ChatInterfaceProps) {
   const [timelineSteps, setTimelineSteps] = useState<TimelineStep[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { orgContext } = useAuth();
+
+  const municipality = orgContext?.municipality;
+  const department = orgContext?.department;
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -178,17 +183,33 @@ export default function ChatInterface({ onMapFocus }: ChatInterfaceProps) {
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {messages.length === 0 && (
           <div className="text-center text-gray-600 text-sm mt-4">
-            <p>Ask about disasters in Latin America</p>
+            <p>{municipality ? `Ask about risks near ${municipality}` : "Ask about disasters in your area"}</p>
             <div className="mt-3 space-y-1 text-xs">
-              <p className="text-gray-700">
-                &quot;What&apos;s happening in Peru right now?&quot;
-              </p>
-              <p className="text-gray-700">
-                &quot;Are there active fires in the Amazon?&quot;
-              </p>
-              <p className="text-gray-700">
-                &quot;Is the risk increasing in Central America?&quot;
-              </p>
+              {municipality ? (
+                <>
+                  <p className="text-gray-700">
+                    &quot;What&apos;s the current situation in {municipality}?&quot;
+                  </p>
+                  <p className="text-gray-700">
+                    &quot;Any earthquake or fire activity nearby?&quot;
+                  </p>
+                  <p className="text-gray-700">
+                    &quot;Is the risk level increasing in {department || "our region"}?&quot;
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-gray-700">
+                    &quot;What&apos;s the current risk level?&quot;
+                  </p>
+                  <p className="text-gray-700">
+                    &quot;Are there active fires nearby?&quot;
+                  </p>
+                  <p className="text-gray-700">
+                    &quot;Any recent earthquake activity?&quot;
+                  </p>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -299,7 +320,7 @@ export default function ChatInterface({ onMapFocus }: ChatInterfaceProps) {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about disasters..."
+            placeholder={municipality ? `Ask about ${municipality}...` : "Ask about risks in your area..."}
             disabled={streaming}
             className="flex-1 bg-gray-800 text-gray-200 rounded-lg px-3 py-2 text-sm
               placeholder:text-gray-600 focus:outline-none focus:ring-1

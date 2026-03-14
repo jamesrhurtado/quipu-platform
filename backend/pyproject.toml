@@ -11,10 +11,12 @@ dependencies = [
     "httpx>=0.28.0",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
-    "agent-framework --pre",
-    "agent-framework-azure-ai --pre",
+    "agent-framework",
+    "agent-framework-azure-ai",
     "azure-identity>=1.19.0",
     "openai>=1.60.0",
+    "python-jose[cryptography]>=3.3.0",
+    "cryptography>=42.0",
 ]
 
 [build-system]
@@ -26,7 +28,7 @@ packages = ["."]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W"]

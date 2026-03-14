@@ -184,8 +184,8 @@ async def run_agent_query(query: str) -> AsyncIterator[dict[str, Any]]:
     workflow = MagenticBuilder(
         participants=agents,
         manager_agent=manager_agent,
-        max_round_count=8,
-        max_stall_count=3,
+        max_round_count=6,
+        max_stall_count=2,
     ).build()
 
     try:

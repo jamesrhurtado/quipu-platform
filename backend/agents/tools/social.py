@@ -14,7 +14,7 @@ from agents.scoring import wrap_tool_result
 async def search_news(
     query: Annotated[str, "Search query (e.g. 'earthquake Peru', 'sismo Cajamarca')"],
     language: Annotated[str, "Language: 'en' for English, 'es' for Spanish"] = "es",
-    max_results: Annotated[int, "Maximum number of results to return"] = 15,
+    max_results: Annotated[int, "Maximum number of results to return"] = 8,
 ) -> str:
     """Search Google News for recent articles about disasters. Supports English and Spanish queries."""
     lang_map = {
@@ -69,7 +69,7 @@ async def search_news(
 @tool
 async def monitor_bluesky(
     keywords: Annotated[str, "Comma-separated keywords to search for (e.g. 'sismo,earthquake,terremoto')"],
-    max_results: Annotated[int, "Maximum number of posts to return"] = 30,
+    max_results: Annotated[int, "Maximum number of posts to return"] = 10,
 ) -> str:
     """Search recent Bluesky social media posts matching disaster keywords."""
     from config import settings
@@ -112,7 +112,7 @@ async def search_reliefweb(
     params = {"appname": app_settings.reliefweb_appname}
     payload: dict = {
         "query": {"value": query},
-        "limit": 15,
+        "limit": 8,
         "sort": ["date.created:desc"],
         "fields": {
             "include": [

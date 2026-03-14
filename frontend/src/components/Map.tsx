@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet.markercluster";
 import type { Event, MapFocusInstruction } from "@/lib/api";
+import { useAuth } from "@/lib/auth-provider";
+import { fetchSettings } from "@/lib/api";
 
 const SEVERITY_COLORS: Record<number, string> = {
   1: "#6b7280", // gray
@@ -60,14 +62,20 @@ export default function Map({ events, selectedEvent, onSelectEvent, mapFocus }: 
   const mapRef = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { orgContext } = useAuth();
 
-  // Initialize map
+  // Initialize map — use org center/zoom if available
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
+    const center: [number, number] = orgContext
+      ? [orgContext.map_center_lat, orgContext.map_center_lon]
+      : [-10, -65];
+    const zoom = orgContext?.map_zoom ?? 4;
+
     const map = L.map(containerRef.current, {
-      center: [-10, -65], // Center on South America
-      zoom: 4,
+      center,
+      zoom,
       zoomControl: true,
       attributionControl: true,
     });
@@ -115,6 +123,27 @@ export default function Map({ events, selectedEvent, onSelectEvent, mapFocus }: 
     map.addLayer(cluster);
     mapRef.current = map;
     clusterRef.current = cluster;
+
+    // Draw monitored zone boundaries if available
+    if (orgContext) {
+      fetchSettings()
+        .then((s) => {
+          for (const zone of s.monitored_zones) {
+            const bounds: L.LatLngBoundsExpression = [
+              [zone.bbox.min_lat, zone.bbox.min_lon],
+              [zone.bbox.max_lat, zone.bbox.max_lon],
+            ];
+            L.rectangle(bounds, {
+              color: zone.is_primary ? "#f59e0b" : "#6b7280",
+              weight: 1.5,
+              opacity: 0.6,
+              fillOpacity: 0.05,
+              dashArray: zone.is_primary ? undefined : "6 4",
+            }).addTo(map).bindTooltip(zone.name, { permanent: false, direction: "center" });
+          }
+        })
+        .catch(() => {}); // Non-critical, fail silently
+    }
 
     return () => {
       map.remove();

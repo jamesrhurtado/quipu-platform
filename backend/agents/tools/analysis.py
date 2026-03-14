@@ -1,5 +1,6 @@
 """Analysis tools — database queries, situation reports, risk assessment, and trend analysis."""
 
+import contextvars
 import json
 from datetime import datetime, timezone
 from typing import Annotated
@@ -7,6 +8,9 @@ from typing import Annotated
 from agent_framework import tool
 from agents.scoring import wrap_tool_result
 from db import get_pool
+
+# Context variable to pass org_id from the query endpoint to agent tools
+_current_org_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("_current_org_id", default=None)
 
 
 @tool
@@ -90,7 +94,7 @@ async def query_event_database(
             FROM events
             WHERE {base_where}
             ORDER BY severity DESC, created_at DESC
-            LIMIT 50
+            LIMIT 15
         """
 
         rows = await conn.fetch(query, *params)
@@ -110,13 +114,12 @@ async def query_event_database(
     for r in rows:
         results.append({
             "source": r["source"],
-            "event_type": r["event_type"],
-            "title": r["title"],
-            "severity": r["severity"],
-            "magnitude": r["magnitude"],
-            "lat": r["lat"],
-            "lon": r["lon"],
-            "started_at": r["started_at"].isoformat() if r["started_at"] else None,
+            "type": r["event_type"],
+            "title": r["title"][:80],
+            "sev": r["severity"],
+            "mag": r["magnitude"],
+            "lat": round(r["lat"], 2),
+            "lon": round(r["lon"], 2),
         })
         if r["created_at"]:
             timestamps.append(r["created_at"].isoformat())
@@ -192,24 +195,26 @@ async def compute_risk_assessment(
     )
 
     # Persist to database
+    org_id = _current_org_id.get(None)
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute(
             """
-            INSERT INTO risk_assessments (region, risk_score, risk_level, components, explanation)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO risk_assessments (region, risk_score, risk_level, components, explanation, org_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
             """,
             assessment.region,
             assessment.risk_score,
             assessment.risk_level,
             json.dumps(assessment.components),
             assessment.explanation,
+            org_id,
         )
 
     # Phase 3: Evaluate alert escalation
     try:
         from services.alert_engine import evaluate_and_alert
-        alert_info = await evaluate_and_alert(assessment)
+        alert_info = await evaluate_and_alert(assessment, org_id=org_id)
     except Exception:
         alert_info = None
 
@@ -220,7 +225,6 @@ async def compute_risk_assessment(
         "components": assessment.components,
         "explanation": assessment.explanation,
         "drivers": assessment.drivers,
-        "component_analysis": assessment.component_analysis,
     }
     if alert_info:
         result["alert"] = alert_info

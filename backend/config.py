@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     # Dashboard
     dashboard_url: str = "http://localhost:3000"
 
+    # Azure Entra ID (multi-tenant auth)
+    azure_tenant_id: str = ""
+    azure_client_id: str = ""
+
+    # Encryption key (Fernet) for stored credentials
+    encryption_key: str = ""
+
+    # Multi-tenant feature flag
+    multi_tenant_enabled: bool = False
+
     # App
     poll_interval_seconds: int = 300
     log_level: str = "INFO"

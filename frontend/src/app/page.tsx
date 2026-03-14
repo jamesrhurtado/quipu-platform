@@ -1,142 +1,133 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useCallback, useRef, useState } from "react";
-import AlertBanner from "@/components/AlertBanner";
-import ChatInterface from "@/components/ChatInterface";
-import EventFeed from "@/components/EventFeed";
-import { useEvents } from "@/hooks/useEvents";
-import { useSSE } from "@/hooks/useSSE";
-import type { AlertData, MapFocusInstruction } from "@/lib/api";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-provider";
+import Link from "next/link";
 
-const Map = dynamic(() => import("@/components/Map"), { ssr: false });
+export default function LandingPage() {
+  const { isAuthenticated, isLoading, authEnabled } = useAuth();
+  const router = useRouter();
 
-export default function Dashboard() {
-  const { events, loading, refetch } = useEvents();
-  const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
-  const [mapFocus, setMapFocus] = useState<MapFocusInstruction | null>(null);
-  const [feedHeightPct, setFeedHeightPct] = useState(55);
-  const rightPanelRef = useRef<HTMLDivElement>(null);
-  const draggingRef = useRef(false);
-  const [alerts, setAlerts] = useState<AlertData[]>([]);
+  useEffect(() => {
+    if (isLoading) return;
+    if (!authEnabled) {
+      // No auth configured — go straight to dashboard
+      router.replace("/dashboard");
+    }
+  }, [isLoading, authEnabled, router]);
 
-  const handleMapFocus = useCallback((focus: MapFocusInstruction) => {
-    setMapFocus(focus);
-  }, []);
-
-  const handleAlert = useCallback((alert: AlertData) => {
-    setAlerts((prev) => [alert, ...prev]);
-  }, []);
-
-  const handleDismissAlert = useCallback((id: string) => {
-    setAlerts((prev) => prev.filter((a) => a.id !== id));
-  }, []);
-
-  const { connected } = useSSE(refetch, handleAlert);
-
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    draggingRef.current = true;
-
-    const onMove = (ev: MouseEvent) => {
-      if (!draggingRef.current || !rightPanelRef.current) return;
-      const rect = rightPanelRef.current.getBoundingClientRect();
-      const pct = ((ev.clientY - rect.top) / rect.height) * 100;
-      setFeedHeightPct(Math.min(80, Math.max(20, pct)));
-    };
-
-    const onUp = () => {
-      draggingRef.current = false;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }, []);
-
-  return (
-    <div className="flex flex-col h-screen">
-      {/* Alert Banners */}
-      {alerts.map((alert) => (
-        <AlertBanner
-          key={alert.id}
-          alert={alert}
-          onDismiss={handleDismissAlert}
-        />
-      ))}
-
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-bold text-sentinel-500">
-            Quipu
-          </h1>
-          <span className="text-xs text-gray-400">
-            Disaster & Climate Risk Monitor
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <div
-              className={`w-2 h-2 rounded-full ${
-                connected
-                  ? "bg-green-500 animate-pulse-dot"
-                  : "bg-red-500"
-              }`}
-            />
-            <span className="text-xs text-gray-400">
-              {connected ? "Live" : "Disconnected"}
-            </span>
-          </div>
-          <span className="text-xs text-gray-500">
-            {events.length} events
-          </span>
-        </div>
-      </header>
-
-      {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left panel — Map */}
-        <div className="flex-1 relative">
-          <Map
-            events={events}
-            selectedEvent={selectedEvent}
-            onSelectEvent={setSelectedEvent}
-            mapFocus={mapFocus}
-          />
-        </div>
-
-        {/* Right panel — Feed + Chat */}
-        <div
-          ref={rightPanelRef}
-          className="w-[420px] flex flex-col border-l border-gray-800 bg-gray-900"
-        >
-          {/* Event Feed */}
-          <div
-            className="overflow-hidden"
-            style={{ height: `${feedHeightPct}%` }}
-          >
-            <EventFeed
-              events={events}
-              loading={loading}
-              selectedEvent={selectedEvent}
-              onSelectEvent={setSelectedEvent}
-            />
-          </div>
-
-          {/* Drag handle */}
-          <div
-            onMouseDown={handleDragStart}
-            className="h-1.5 bg-gray-800 hover:bg-sentinel-700 cursor-row-resize flex-shrink-0 transition-colors"
-          />
-
-          {/* Chat Interface */}
-          <div className="flex-1 overflow-hidden border-t border-gray-800">
-            <ChatInterface onMapFocus={handleMapFocus} />
-          </div>
-        </div>
+  // If not auth-enabled, show nothing (redirecting)
+  if (!authEnabled || isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-950 text-gray-400">
+        Loading...
       </div>
+    );
+  }
+
+  // Auth enabled — show landing page
+  return (
+    <div className="min-h-screen bg-gray-950">
+      {/* Nav */}
+      <nav className="flex items-center justify-between px-8 py-4 border-b border-gray-800/50">
+        <span className="text-xl font-bold text-sentinel-500">Quipu</span>
+        <div className="flex items-center gap-4">
+          {isAuthenticated ? (
+            <Link
+              href="/dashboard"
+              className="px-4 py-2 bg-sentinel-600 hover:bg-sentinel-700 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              Go to Dashboard
+            </Link>
+          ) : (
+            <Link
+              href="/auth/login"
+              className="px-4 py-2 bg-sentinel-600 hover:bg-sentinel-700 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              Sign In
+            </Link>
+          )}
+        </div>
+      </nav>
+
+      {/* Hero */}
+      <section className="max-w-4xl mx-auto px-8 py-24 text-center">
+        <h1 className="text-5xl font-bold text-gray-100 mb-6 leading-tight">
+          AI Early Warning for
+          <br />
+          <span className="text-sentinel-500">Your Municipality</span>
+        </h1>
+        <p className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto">
+          Quipu monitors earthquakes, wildfires, floods, and climate risks around your city
+          in real time using 7 specialized AI agents. Get instant alerts on Teams and Bluesky.
+        </p>
+        <Link
+          href={isAuthenticated ? "/dashboard" : "/auth/login"}
+          className="inline-block px-8 py-4 bg-sentinel-600 hover:bg-sentinel-700 text-white rounded-xl text-lg font-semibold transition-colors"
+        >
+          {isAuthenticated ? "Open Dashboard" : "Get Started"}
+        </Link>
+      </section>
+
+      {/* Features */}
+      <section className="max-w-5xl mx-auto px-8 py-16">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+            <div className="text-3xl mb-4">📡</div>
+            <h3 className="text-lg font-semibold text-gray-100 mb-2">Real-Time Monitoring</h3>
+            <p className="text-gray-400 text-sm">
+              Continuous data from USGS, GDACS, NASA EONET, NASA FIRMS, and Open-Meteo.
+              Events appear on your dashboard within minutes.
+            </p>
+          </div>
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+            <div className="text-3xl mb-4">🤖</div>
+            <h3 className="text-lg font-semibold text-gray-100 mb-2">Multi-Agent AI</h3>
+            <p className="text-gray-400 text-sm">
+              7 specialized agents analyze earthquakes, fires, weather anomalies, news, and social media
+              to compute risk scores for your area.
+            </p>
+          </div>
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+            <div className="text-3xl mb-4">🔔</div>
+            <h3 className="text-lg font-semibold text-gray-100 mb-2">Instant Alerts</h3>
+            <p className="text-gray-400 text-sm">
+              Automatic alerts to Microsoft Teams and Bluesky when risk thresholds are crossed.
+              Configure emergency contacts for escalation.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section className="max-w-4xl mx-auto px-8 py-16">
+        <h2 className="text-2xl font-bold text-gray-100 text-center mb-12">How It Works</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="text-center">
+            <div className="w-12 h-12 rounded-full bg-sentinel-600/20 border border-sentinel-600 text-sentinel-400 flex items-center justify-center text-lg font-bold mx-auto mb-4">1</div>
+            <h3 className="text-gray-100 font-medium mb-1">Register</h3>
+            <p className="text-gray-400 text-sm">Sign in with your Microsoft account and select your municipality.</p>
+          </div>
+          <div className="text-center">
+            <div className="w-12 h-12 rounded-full bg-sentinel-600/20 border border-sentinel-600 text-sentinel-400 flex items-center justify-center text-lg font-bold mx-auto mb-4">2</div>
+            <h3 className="text-gray-100 font-medium mb-1">Configure</h3>
+            <p className="text-gray-400 text-sm">Set up Teams webhooks, Bluesky, and emergency contacts.</p>
+          </div>
+          <div className="text-center">
+            <div className="w-12 h-12 rounded-full bg-sentinel-600/20 border border-sentinel-600 text-sentinel-400 flex items-center justify-center text-lg font-bold mx-auto mb-4">3</div>
+            <h3 className="text-gray-100 font-medium mb-1">Monitor</h3>
+            <p className="text-gray-400 text-sm">Your AI-powered dashboard tracks risks 24/7 and alerts you automatically.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-800/50 py-8 text-center text-gray-500 text-sm">
+        Quipu — Named after the Inca knotted-string recording system.
+        <br />
+        Built for Microsoft AI Agents Hackathon.
+      </footer>
     </div>
   );
 }

@@ -8,9 +8,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes.alerts import router as alerts_router
+from api.routes.auth import router as auth_router
 from api.routes.events import router as events_router
+from api.routes.onboarding import router as onboarding_router
 from api.routes.query import router as query_router
 from api.routes.risk import router as risk_router
+from api.routes.settings import router as settings_router
+from api.routes.status import router as status_router
 from api.routes.stream import router as stream_router
 from config import settings
 from db import close_db, init_db
@@ -74,11 +78,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
+app.include_router(onboarding_router)
 app.include_router(alerts_router)
 app.include_router(events_router)
 app.include_router(stream_router)
 app.include_router(query_router)
 app.include_router(risk_router)
+app.include_router(settings_router)
+app.include_router(status_router)
 
 
 @app.get("/health")

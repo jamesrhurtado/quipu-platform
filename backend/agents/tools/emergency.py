@@ -29,7 +29,7 @@ async def query_earthquakes(
         "minmagnitude": min_magnitude,
         "starttime": f"now-{days_back}days",
         "orderby": "time",
-        "limit": 20,
+        "limit": 10,
     }
     try:
         async with httpx.AsyncClient() as client:
@@ -129,7 +129,7 @@ async def query_gdacs_alerts(
             timestamps.append(from_date)
 
     return wrap_tool_result(
-        {"count": len(results), "alerts": results[:20]},
+        {"count": len(results), "alerts": results[:10]},
         source="GDACS",
         timestamps=timestamps,
     )
@@ -143,7 +143,7 @@ async def query_eonet_events(
 ) -> str:
     """Query NASA EONET for active natural events by category."""
     url = "https://eonet.gsfc.nasa.gov/api/v3/events"
-    params = {"status": status, "limit": 30, "days": days_back}
+    params = {"status": status, "limit": 15, "days": days_back}
     if category != "all":
         params["category"] = category
 
@@ -216,7 +216,7 @@ async def query_cached_events(
                started_at, created_at
         FROM events WHERE {where}
         ORDER BY severity DESC, created_at DESC
-        LIMIT 30
+        LIMIT 15
     """
 
     pool = await get_pool()
@@ -227,11 +227,9 @@ async def query_cached_events(
     timestamps = []
     for r in rows:
         results.append({
-            "external_id": r["external_id"],
             "source": r["source"],
             "event_type": r["event_type"],
             "title": r["title"],
-            "description": r["description"],
             "severity": r["severity"],
             "magnitude": r["magnitude"],
             "lat": r["lat"],

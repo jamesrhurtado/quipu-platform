@@ -90,3 +90,113 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE INDEX IF NOT EXISTS idx_notifications_region ON notifications(region);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+
+-- ============================================================
+-- Multi-tenant tables
+-- ============================================================
+
+DO $$ BEGIN
+    CREATE TYPE user_role AS ENUM ('owner', 'admin', 'member', 'viewer');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS organizations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    slug VARCHAR(100) UNIQUE NOT NULL,
+    municipality VARCHAR(255) NOT NULL,
+    department VARCHAR(255),
+    country VARCHAR(100) DEFAULT 'Peru',
+    -- Bounding box for spatial filtering
+    bbox_min_lat DOUBLE PRECISION NOT NULL,
+    bbox_max_lat DOUBLE PRECISION NOT NULL,
+    bbox_min_lon DOUBLE PRECISION NOT NULL,
+    bbox_max_lon DOUBLE PRECISION NOT NULL,
+    -- Map defaults
+    map_center_lat DOUBLE PRECISION NOT NULL,
+    map_center_lon DOUBLE PRECISION NOT NULL,
+    map_zoom INTEGER DEFAULT 10,
+    -- Notification config
+    teams_webhook_url TEXT,
+    teams_enabled BOOLEAN DEFAULT false,
+    bluesky_handle VARCHAR(255),
+    bluesky_app_password_encrypted TEXT,
+    bluesky_enabled BOOLEAN DEFAULT false,
+    -- Status
+    is_active BOOLEAN DEFAULT true,
+    onboarding_completed BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_organizations_slug ON organizations(slug);
+CREATE INDEX IF NOT EXISTS idx_organizations_active ON organizations(is_active) WHERE is_active = true;
+
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entra_oid VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    display_name VARCHAR(255),
+    org_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+    role user_role DEFAULT 'member',
+    last_login_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_entra_oid ON users(entra_oid);
+CREATE INDEX IF NOT EXISTS idx_users_org_id ON users(org_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+CREATE TABLE IF NOT EXISTS emergency_contacts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    role VARCHAR(255),
+    phone VARCHAR(50),
+    email VARCHAR(255),
+    notify_on_level TEXT[] DEFAULT '{}',
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_emergency_contacts_org ON emergency_contacts(org_id);
+
+CREATE TABLE IF NOT EXISTS monitored_zones (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    bbox_min_lat DOUBLE PRECISION NOT NULL,
+    bbox_max_lat DOUBLE PRECISION NOT NULL,
+    bbox_min_lon DOUBLE PRECISION NOT NULL,
+    bbox_max_lon DOUBLE PRECISION NOT NULL,
+    is_primary BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_monitored_zones_org ON monitored_zones(org_id);
+
+-- Add org_id to existing tables (nullable for backward compatibility)
+DO $$ BEGIN
+    ALTER TABLE risk_assessments ADD COLUMN org_id UUID REFERENCES organizations(id);
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE alerts ADD COLUMN org_id UUID REFERENCES organizations(id);
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE notifications ADD COLUMN org_id UUID REFERENCES organizations(id);
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE situation_reports ADD COLUMN org_id UUID REFERENCES organizations(id);
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_risk_assessments_org ON risk_assessments(org_id);
+CREATE INDEX IF NOT EXISTS idx_alerts_org ON alerts(org_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_org ON notifications(org_id);
+CREATE INDEX IF NOT EXISTS idx_situation_reports_org ON situation_reports(org_id);

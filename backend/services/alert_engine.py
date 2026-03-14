@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 # Risk score thresholds for alert levels
 ALERT_THRESHOLDS = [
     ("critical", 4.5),
-    ("high", 4.0),
-    ("elevated", 3.0),
+    ("high", 3.5),
+    ("elevated", 2.5),
 ]
 
 # Cooldown: don't re-alert same region+level within 30 minutes
@@ -49,32 +49,67 @@ def _classify_alert_level(risk_score: float) -> str | None:
     return None
 
 
-async def _check_cooldown(region: str, alert_level: str) -> bool:
-    """Check if we're still in cooldown for this region+level. Returns True if cooled down (ok to alert)."""
+async def _check_cooldown(region: str, alert_level: str, org_id: str | None = None) -> bool:
+    """Check if we're still in cooldown for this region+level+org. Returns True if cooled down (ok to alert)."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        row = await conn.fetchval(
-            """
-            SELECT COUNT(*) FROM alerts
-            WHERE LOWER(region) = LOWER($1)
-              AND alert_level = $2
-              AND created_at > NOW() - make_interval(mins => $3)
-            """,
-            region,
-            alert_level,
-            COOLDOWN_MINUTES,
-        )
+        if org_id:
+            row = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM alerts
+                WHERE LOWER(region) = LOWER($1)
+                  AND alert_level = $2
+                  AND org_id = $3
+                  AND created_at > NOW() - make_interval(mins => $4)
+                """,
+                region,
+                alert_level,
+                org_id,
+                COOLDOWN_MINUTES,
+            )
+        else:
+            row = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM alerts
+                WHERE LOWER(region) = LOWER($1)
+                  AND alert_level = $2
+                  AND org_id IS NULL
+                  AND created_at > NOW() - make_interval(mins => $3)
+                """,
+                region,
+                alert_level,
+                COOLDOWN_MINUTES,
+            )
     return row == 0
 
 
 async def _send_notifications(
-    alert_level: str, region: str, risk_score: float, explanation: str = "", drivers: list | None = None
+    alert_level: str,
+    region: str,
+    risk_score: float,
+    explanation: str = "",
+    drivers: list | None = None,
+    org_config: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
-    """Send real notifications where configured, simulate the rest."""
+    """Send real notifications where configured, simulate the rest.
+
+    org_config: optional dict with keys teams_webhook_url, teams_enabled,
+                bluesky_handle, bluesky_app_password (decrypted), bluesky_enabled,
+                dashboard_url.
+    If None, falls back to global settings.
+    """
     actions = []
 
+    # Resolve notification config — per-org or global
+    teams_enabled = org_config["teams_enabled"] if org_config else settings.teams_enabled
+    teams_webhook_url = org_config.get("teams_webhook_url") if org_config else settings.teams_webhook_url
+    bsky_enabled = org_config["bluesky_enabled"] if org_config else (settings.bluesky_notifications_enabled and bool(settings.bluesky_handle))
+    bsky_handle = org_config.get("bluesky_handle") if org_config else settings.bluesky_handle
+    bsky_password = org_config.get("bluesky_app_password") if org_config else settings.bluesky_app_password
+    dashboard_url = org_config.get("dashboard_url", settings.dashboard_url) if org_config else settings.dashboard_url
+
     # Teams: real delivery if enabled and webhook configured
-    if settings.teams_enabled and settings.teams_webhook_url:
+    if teams_enabled and teams_webhook_url:
         try:
             from services.notifier import build_adaptive_card, send_teams_webhook
 
@@ -84,12 +119,12 @@ async def _send_notifications(
                 risk_score=risk_score,
                 explanation=explanation,
                 drivers=drivers,
-                dashboard_url=settings.dashboard_url,
+                dashboard_url=dashboard_url,
             )
-            result = await send_teams_webhook(settings.teams_webhook_url, card)
+            result = await send_teams_webhook(teams_webhook_url, card)
             actions.append({
                 "type": "teams",
-                "target": settings.teams_webhook_url[:50],
+                "target": teams_webhook_url[:50],
                 "label": "Microsoft Teams",
                 "status": result["status"],
                 "message": f"[QUIPU ALERT] {alert_level.upper()} risk for {region} (score: {risk_score}/5)",
@@ -98,13 +133,13 @@ async def _send_notifications(
             logger.error(f"Teams notification error: {e}")
             actions.append({
                 "type": "teams",
-                "target": settings.teams_webhook_url[:50],
+                "target": teams_webhook_url[:50],
                 "label": "Microsoft Teams",
                 "status": "failed",
                 "message": str(e),
             })
-    elif not settings.teams_enabled:
-        logger.debug("Teams notifications disabled via TEAMS_ENABLED=false")
+    elif not teams_enabled:
+        logger.debug("Teams notifications disabled")
     else:
         actions.append({
             "type": "teams",
@@ -115,12 +150,11 @@ async def _send_notifications(
         })
 
     # Bluesky: real delivery if enabled and credentials configured
-    if settings.bluesky_notifications_enabled and settings.bluesky_handle and settings.bluesky_app_password:
+    if bsky_enabled and bsky_handle and bsky_password:
         try:
             from services.notifier import post_to_bluesky
 
             level_es = {"elevated": "ELEVADO", "high": "ALTO", "critical": "CRITICO"}.get(alert_level, alert_level.upper())
-            # Build driver summary
             driver_lines = ""
             if drivers:
                 for d in drivers[:2]:
@@ -134,10 +168,10 @@ async def _send_notifications(
                 f"🚨 QUIPU ALERT — {alert_level.upper()}\n"
                 f"Risk: {risk_score}/5 | {region}"
             )
-            result = await post_to_bluesky(settings.bluesky_handle, settings.bluesky_app_password, text)
+            result = await post_to_bluesky(bsky_handle, bsky_password, text)
             actions.append({
                 "type": "bluesky",
-                "target": settings.bluesky_handle,
+                "target": bsky_handle,
                 "label": "Bluesky",
                 "status": result["status"],
                 "message": text[:200],
@@ -146,7 +180,7 @@ async def _send_notifications(
             logger.error(f"Bluesky notification error: {e}")
             actions.append({
                 "type": "bluesky",
-                "target": settings.bluesky_handle,
+                "target": bsky_handle,
                 "label": "Bluesky",
                 "status": "failed",
                 "message": str(e),
@@ -170,9 +204,15 @@ async def _send_notifications(
     return actions
 
 
-async def evaluate_and_alert(assessment: Any) -> dict[str, Any] | None:
+async def evaluate_and_alert(
+    assessment: Any,
+    org_id: str | None = None,
+    org_config: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     """Evaluate a risk assessment and trigger alerts if thresholds are exceeded.
 
+    org_id: optional organization ID for scoped alerts.
+    org_config: optional per-org notification config dict.
     Returns alert info dict if an alert was triggered, None otherwise.
     """
     alert_level = _classify_alert_level(assessment.risk_score)
@@ -180,7 +220,7 @@ async def evaluate_and_alert(assessment: Any) -> dict[str, Any] | None:
         return None
 
     # Check cooldown
-    if not await _check_cooldown(assessment.region, alert_level):
+    if not await _check_cooldown(assessment.region, alert_level, org_id=org_id):
         logger.info(
             f"Alert cooldown active for {assessment.region}/{alert_level}, skipping"
         )
@@ -193,6 +233,7 @@ async def evaluate_and_alert(assessment: Any) -> dict[str, Any] | None:
         assessment.risk_score,
         explanation=assessment.explanation or "",
         drivers=assessment.drivers,
+        org_config=org_config,
     )
 
     # Persist alert
@@ -203,8 +244,8 @@ async def evaluate_and_alert(assessment: Any) -> dict[str, Any] | None:
     async with pool.acquire() as conn:
         alert_id = await conn.fetchval(
             """
-            INSERT INTO alerts (region, alert_level, risk_score, risk_level, explanation, drivers, actions_taken)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO alerts (region, alert_level, risk_score, risk_level, explanation, drivers, actions_taken, org_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
             """,
             assessment.region,
@@ -214,6 +255,7 @@ async def evaluate_and_alert(assessment: Any) -> dict[str, Any] | None:
             assessment.explanation,
             drivers_json,
             actions_json,
+            org_id,
         )
 
     alert_data = {
@@ -229,12 +271,12 @@ async def evaluate_and_alert(assessment: Any) -> dict[str, Any] | None:
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # Broadcast via SSE
-    await sse_manager.broadcast("alert", alert_data)
+    # Broadcast via SSE — scoped to org if provided
+    await sse_manager.broadcast("alert", alert_data, org_id=org_id)
 
     logger.warning(
         f"ALERT TRIGGERED: {alert_level.upper()} for {assessment.region} "
-        f"(risk_score={assessment.risk_score})"
+        f"(risk_score={assessment.risk_score}, org_id={org_id})"
     )
 
     return alert_data

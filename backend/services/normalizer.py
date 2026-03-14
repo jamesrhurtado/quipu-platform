@@ -27,9 +27,9 @@ def _earthquake_severity(mag: float | None) -> int:
         return 5
     if mag >= 6.0:
         return 4
-    if mag >= 5.0:
+    if mag >= 4.5:
         return 3
-    if mag >= 4.0:
+    if mag >= 3.0:
         return 2
     return 1
 
@@ -64,8 +64,22 @@ def normalize_usgs_earthquake(feature: dict[str, Any]) -> dict[str, Any] | None:
 
 def normalize_gdacs_event(entry: dict[str, Any]) -> dict[str, Any] | None:
     try:
-        lat = float(entry.get("geo:lat", entry.get("lat", 0)))
-        lon = float(entry.get("geo:long", entry.get("lon", 0)))
+        # GDACS provides coords as "geo:point" = "lat lon" (space-separated)
+        geo_point = entry.get("geo:point", "")
+        if geo_point and geo_point.strip():
+            parts = geo_point.strip().split()
+            if len(parts) >= 2:
+                lat = float(parts[0])
+                lon = float(parts[1])
+            else:
+                lat = float(entry.get("geo:lat", 0))
+                lon = float(entry.get("geo:long", 0))
+        else:
+            lat = float(entry.get("geo:lat", 0))
+            lon = float(entry.get("geo:long", 0))
+        # Skip events at (0,0) — means coordinates were not parsed
+        if lat == 0 and lon == 0:
+            return None
     except (ValueError, TypeError):
         return None
 

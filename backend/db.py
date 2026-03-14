@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import asyncpg
 
@@ -27,7 +28,7 @@ async def init_db() -> None:
     )
     # Run schema migration
     async with _pool.acquire() as conn:
-        schema_path = "sql/schema.sql"
+        schema_path = Path(__file__).resolve().parent / "sql" / "schema.sql"
         try:
             with open(schema_path) as f:
                 schema_sql = f.read()

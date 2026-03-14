@@ -2,8 +2,10 @@
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from auth import TenantContext, get_tenant
+from config import settings
 from db import get_pool
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
@@ -13,34 +15,43 @@ router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 async def list_alerts(
     acknowledged: bool | None = None,
     limit: int = 50,
+    tenant: TenantContext = Depends(get_tenant),
 ):
     """List alerts, optionally filtered by acknowledged status."""
     pool = await get_pool()
     async with pool.acquire() as conn:
+        # Scope to org when multi-tenant is active
+        org_filter = ""
+        params: list = []
+        idx = 1
+
+        if settings.multi_tenant_enabled and tenant.org_id:
+            org_filter = f"org_id = ${idx}"
+            params.append(tenant.org_id)
+            idx += 1
+
+        conditions = []
+        if org_filter:
+            conditions.append(org_filter)
         if acknowledged is not None:
-            rows = await conn.fetch(
-                """
-                SELECT id, region, alert_level, risk_score, risk_level,
-                       explanation, drivers, actions_taken, acknowledged, created_at
-                FROM alerts
-                WHERE acknowledged = $1
-                ORDER BY created_at DESC
-                LIMIT $2
-                """,
-                acknowledged,
-                limit,
-            )
-        else:
-            rows = await conn.fetch(
-                """
-                SELECT id, region, alert_level, risk_score, risk_level,
-                       explanation, drivers, actions_taken, acknowledged, created_at
-                FROM alerts
-                ORDER BY created_at DESC
-                LIMIT $1
-                """,
-                limit,
-            )
+            conditions.append(f"acknowledged = ${idx}")
+            params.append(acknowledged)
+            idx += 1
+
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+        rows = await conn.fetch(
+            f"""
+            SELECT id, region, alert_level, risk_score, risk_level,
+                   explanation, drivers, actions_taken, acknowledged, created_at
+            FROM alerts
+            {where}
+            ORDER BY created_at DESC
+            LIMIT ${idx}
+            """,
+            *params,
+            limit,
+        )
 
     return {
         "alerts": [

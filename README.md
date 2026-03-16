@@ -1,8 +1,8 @@
 # Quipu
 
-**AI early warning system for disaster monitoring in Latin America, powered by 7 specialized agents.**
+**An AI-powered multi-tenant early warning platform where 7 specialized agents monitor earthquakes, fires, floods, and climate risks in real time — automatically alerting Peruvian municipalities through Microsoft Teams and Bluesky before disasters escalate.**
 
-Quipu is an autonomous monitoring system that continuously ingests data from 8+ live sources — USGS, GDACS, NASA EONET, NASA FIRMS, GDELT, ReliefWeb, Bluesky, and Open-Meteo — and uses a team of 7 AI agents to analyze, correlate, and deliver actionable risk assessments through a real-time dashboard, Microsoft Teams, and Bluesky.
+Quipu — named after the Inca knotted-string recording system — is built with the Microsoft Agent Framework and Azure OpenAI. Seven specialized agents collaborate through MagenticOne orchestration to monitor disaster signals from 8+ live sources — USGS, GDACS, NASA EONET, NASA FIRMS, GDELT, ReliefWeb, Bluesky, and Open-Meteo — and alert communities before crises escalate. Each municipality gets its own dashboard, monitoring zones, notification channels, and a shareable public risk page for citizens.
 
 Ask a question in natural language. Quipu figures out which agents to activate, queries the right APIs, scores source reliability, computes a composite risk assessment, detects rainfall anomalies, and sends real alerts to your Teams channel — all in seconds.
 
@@ -13,15 +13,42 @@ Ask a question in natural language. Quipu figures out which agents to activate, 
 
 ---
 
+## Example
+
+**1. Onboard a municipality** — Sign in with Microsoft, select your city (e.g. Arequipa), and nearby monitoring zones within 100 km are automatically discovered. Configure notification channels (Microsoft Teams, Bluesky) and finish setup in minutes.
+
+**2. Monitor your dashboard** — The dashboard is scoped to your municipality. See earthquakes, fires, and disaster alerts within your monitoring zone updating in real time on an interactive map.
+
+**3. Ask a question** — Type `"What's the current situation in Arequipa?"` and seven agents investigate in parallel using MagenticOne orchestration:
+
+```
+Manager    -> Selected all agents for broad situation query              0.2s
+Emergency  -> Found M4.1 earthquake, 2 GDACS alerts in zone             1.8s
+Weather    -> Rainfall anomaly +120% above historical average            2.4s
+News       -> 12 articles from GDELT, 3 ReliefWeb reports               2.6s
+Analysis   -> Compound risk score: ELEVATED (3.8/5)                      3.1s
+Manager    -> Synthesizing intelligence report                           4.0s
+```
+
+**4. Get alerted automatically** — When risk crosses a threshold, alerts arrive as Adaptive Cards in Microsoft Teams with risk breakdowns and links to the dashboard. A background poller runs every five minutes, computing risk scores with zero AI cost for 24/7 compound risk detection.
+
+**5. Share with citizens** — Each municipality also has a shareable public risk page that citizens can access directly.
+
+---
+
 ## Why Quipu Exists
 
-Small municipalities in Peru lack dedicated monitoring teams. When a 7.2 earthquake hits near Cusco during heavy rainfall season, information fractures across dozens of sources: USGS reports the seismology, GDACS estimates impact, weather data shows abnormal precipitation, NASA detects landslide risk, news outlets report casualties at different speeds, and social media fills with unverified claims. Emergency coordinators must manually piece this together under time pressure.
+Disasters rarely happen alone. Peru faces over 5,000 natural hazard events annually — earthquakes, floods, landslides, and wildfires — yet most of its 1,800+ municipalities lack any monitoring infrastructure. Emergency coordinators rely on WhatsApp rumors and national news, often learning about compound risks (like earthquakes during heavy rainfall triggering landslides) hours after the danger window closes.
+
+When a 7.2 earthquake hits near Cusco during heavy rainfall season, information fractures across dozens of sources: USGS reports the seismology, GDACS estimates impact, weather data shows abnormal precipitation, NASA detects landslide risk, news outlets report casualties at different speeds, and social media fills with unverified claims. Emergency coordinators must manually piece this together under time pressure.
 
 Quipu automates that synthesis. It treats each data domain as a specialist agent, orchestrates them dynamically based on the query, computes compound risks (earthquake + heavy rainfall = landslide danger), and delivers alerts directly to Microsoft Teams and Bluesky — not just raw data, but assessed, scored, and actionable.
 
 ---
 
 ## Architecture
+
+> 📐 **Interactive architecture diagram**: [quipu-guardian-angel.lovable.app](https://preview--quipu-guardian-angel.lovable.app/)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -102,6 +129,16 @@ The NotificationAgent delivers alerts to Microsoft Teams (Adaptive Cards) and Bl
 
 ## Key Features
 
+### Multi-Tenant Architecture
+Each municipality gets:
+- Scoped dashboard with map centered on their city and monitored zone boundaries
+- Independent risk scoring per monitored zone
+- Per-organization Teams webhook and Bluesky credentials (encrypted with Fernet)
+- Emergency contact roster with alert level triggers
+- Shareable public status page at `/status/{city-slug}` for citizens (no login required)
+
+Onboarding takes minutes — select a city from 50 Peruvian municipalities and nearby monitoring zones within 100 km are automatically discovered.
+
 ### Dynamic Agent Selection
 Queries are classified at intake. `"What's the rainfall in Cusco?"` activates WeatherAgent + AnalysisAgent. `"Send an alert to Teams"` activates NotificationAgent. `"What's happening in Peru?"` activates all agents. The reasoning is transparent — every query produces a classification event explaining why specific agents were chosen.
 
@@ -122,6 +159,9 @@ Every 5-minute poll cycle triggers an automatic risk assessment for monitored re
 Every tool result carries two scores:
 - **Reliability** — static weight per source (USGS: 1.0, GDACS: 0.9, GDELT: 0.6, Bluesky: 0.4, Open-Meteo: 0.8)
 - **Freshness** — linear decay from 1.0 (now) to 0.0 (7 days old), computed from actual data timestamps
+
+### Compound Risk Detection
+The core innovation is correlating signals across domains. No single data source tells you that a M4.9 earthquake happened 28km from your city during a period of below-normal rainfall, while 9 active fires are detected in the region and 5 news articles report seismic activity. Quipu's agents correlate these signals — determining that dry conditions reduce landslide risk from the earthquake but increase fire spread vulnerability — producing actionable intelligence that no individual API can provide.
 
 ### Composite Risk Engine
 A weighted formula combines four normalized components:
@@ -363,15 +403,16 @@ sentinel-agent/
 
 | Layer | Technology |
 |-------|-----------|
-| Agent framework | [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) (MagenticOrchestration) |
-| LLM | Azure OpenAI GPT-4o + GPT-4o-mini |
+| Agent framework | [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) + Semantic Kernel (MagenticOne Orchestration) |
+| LLM | Azure OpenAI GPT-4o + GPT-4o-mini via Azure AI Foundry |
+| Authentication | Azure Entra ID (MSAL PKCE flow) |
 | Backend | Python 3.13, FastAPI, asyncpg, httpx |
 | Frontend | Next.js 14, TypeScript, Tailwind CSS |
 | Map | Leaflet + leaflet.markercluster |
-| Database | PostgreSQL 16 + PostGIS 3.4 |
+| Database | Azure Database for PostgreSQL + PostGIS 3.4 |
 | Real-time | Server-Sent Events (sse-starlette) |
 | Notifications | Microsoft Teams (Adaptive Cards), Bluesky (AT Protocol) |
-| Infrastructure | Docker Compose |
+| Infrastructure | Azure Container Apps, Azure AI Foundry, Docker Compose |
 
 ---
 

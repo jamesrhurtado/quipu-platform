@@ -6,6 +6,8 @@ Quipu — named after the Inca knotted-string recording system — is built with
 
 Ask a question in natural language. Quipu figures out which agents to activate, queries the right APIs, scores source reliability, computes a composite risk assessment, detects rainfall anomalies, and sends real alerts to your Teams channel — all in seconds.
 
+🚀 **Live demo**: [quipu-frontend.blackdesert-9996f71d.eastus.azurecontainerapps.io](https://quipu-frontend.blackdesert-9996f71d.eastus.azurecontainerapps.io/)
+
 ![Python](https://img.shields.io/badge/python-3.13-blue)
 ![Next.js](https://img.shields.io/badge/next.js-14-black)
 ![Agent Framework](https://img.shields.io/badge/agent--framework-1.0rc3-purple)
